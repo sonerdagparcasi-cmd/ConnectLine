@@ -19,11 +19,13 @@ import {
   View,
 } from "react-native";
 
-import { useAppTheme } from "../../../shared/theme/appTheme";
 import { t } from "../../../shared/i18n/t";
+import { useAppTheme } from "../../../shared/theme/appTheme";
+import SocialSuggestedUserCard, {
+  type SuggestedUser,
+} from "../components/SocialSuggestedUserCard";
 import { useSocialProfile } from "../hooks/useSocialProfile";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
-
 import {
   getMutualConnections,
   getSuggestedUsers,
@@ -31,24 +33,16 @@ import {
   subscribeFollow,
   toggleFollow,
 } from "../services/socialFollowService";
-
 import {
   getPostsByUser,
   getSavedPosts,
   subscribeFeed,
 } from "../services/socialFeedStateService";
-
+import { addNotification } from "../services/socialNotificationService";
 import {
   socialEventService,
   type SocialEvent,
 } from "../services/socialEventService";
-
-import { addNotification } from "../services/socialNotificationService";
-
-import SocialSuggestedUserCard, {
-  type SuggestedUser,
-} from "../components/SocialSuggestedUserCard";
-
 import type { SocialPost } from "../types/social.types";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
@@ -61,13 +55,7 @@ export default function SocialProfileContainerScreen() {
   const route = useRoute<ProfileRoute>();
   const profileUserId = route.params?.userId;
 
-  const {
-    isOwner,
-    profile,
-    stats,
-    ownerActions,
-    visitorActions,
-  } = useSocialProfile(profileUserId);
+  const { isOwner, profile, stats } = useSocialProfile(profileUserId);
 
   const [tab, setTab] = useState<Tab>("posts");
   const [following, setFollowing] = useState(() => isFollowing(profile.userId));
@@ -75,15 +63,11 @@ export default function SocialProfileContainerScreen() {
   const [feedPosts, setFeedPosts] = useState<SocialPost[]>(() =>
     getPostsByUser(profile.userId)
   );
-  const [savedList, setSavedList] = useState<SocialPost[]>(() =>
-    getSavedPosts()
-  );
+  const [savedList, setSavedList] = useState<SocialPost[]>(() => getSavedPosts());
   const [userEvents, setUserEvents] = useState<SocialEvent[]>([]);
 
   useEffect(() => {
-    const unsub = subscribeFollow(() =>
-      setFollowing(isFollowing(profile.userId))
-    );
+    const unsub = subscribeFollow(() => setFollowing(isFollowing(profile.userId)));
     return unsub;
   }, [profile.userId]);
 
@@ -109,27 +93,32 @@ export default function SocialProfileContainerScreen() {
 
   const gridPosts = feedPosts;
   const videoPosts = useMemo(
-    () =>
-      feedPosts.filter((p) => p.media?.some((m) => m.type === "video")),
+    () => feedPosts.filter((p) => p.media?.some((m) => m.type === "video")),
     [feedPosts]
   );
   const savedPosts = isOwner ? savedList : [];
   const mutualConnections = isOwner ? 0 : getMutualConnections(profile.userId);
-
-  const gradientColors = useMemo(
+  const primaryText = T.isDark ? "#FFFFFF" : "#0f172a";
+  const secondaryText = T.isDark
+    ? "rgba(255,255,255,0.75)"
+    : "rgba(15,23,42,0.75)";
+  const mutedTextColor = T.isDark
+    ? "rgba(255,255,255,0.55)"
+    : "rgba(15,23,42,0.55)";
+  const dangerText = T.isDark ? "#ff6b6b" : "#e11d48";
+  const headerGradient = useMemo(
     () =>
       T.isDark
-        ? ([T.backgroundColor, T.cardBg] as const)
-        : (["#e8f4fc", "#d0e8f8"] as const),
-    [T.isDark, T.backgroundColor, T.cardBg]
+        ? (["#000000", "#1834ae"] as const)
+        : (["#f1f0f0", "#00bfff"] as const),
+    [T.isDark]
   );
 
   const handleOwnerAction = useCallback(
     (id: string) => {
       if (id === "editProfile") navigation.navigate("SocialHome");
       else if (id === "addStory") navigation.navigate("SocialCreateStory");
-      else if (id === "createEvent")
-        navigation.navigate("SocialCreateEvent", undefined);
+      else if (id === "createEvent") navigation.navigate("SocialCreateEvent", undefined);
     },
     [navigation]
   );
@@ -145,222 +134,158 @@ export default function SocialProfileContainerScreen() {
     [profile.userId]
   );
 
-  const followButtonLabel = following
-    ? t("social.profile.unfollow")
-    : t("social.follow");
-
-  /* --------------- HEADER --------------- */
-
   const Header = (
     <View style={styles.headerWrap}>
-      <View style={[styles.coverContainer, { backgroundColor: T.cardBg }]}>
-        {profile.coverUri ? (
-          <Image source={{ uri: profile.coverUri }} style={styles.cover} />
-        ) : (
-          <LinearGradient colors={gradientColors} style={styles.cover} />
-        )}
-        {isOwner && (
-          <TouchableOpacity
-            style={[styles.coverSettings, { backgroundColor: "rgba(0,0,0,0.3)" }]}
-            onPress={() => navigation.navigate("SocialHome")}
-          >
-            <Ionicons name="settings-outline" size={20} color={T.textColor} />
-          </TouchableOpacity>
-        )}
-      </View>
+      <LinearGradient colors={headerGradient} style={styles.headerContainer}>
+        <View style={styles.profileCard}>
+          <View style={styles.headerContentRow}>
+            <View style={styles.leftColumn}>
+              <View style={[styles.avatar, { borderColor: T.border, backgroundColor: T.cardBg }]}>
+                {profile.avatarUri ? (
+                  <Image source={{ uri: profile.avatarUri }} style={styles.avatarImg} />
+                ) : (
+                  <Ionicons name="person" size={32} color={T.mutedText} />
+                )}
+              </View>
 
-      <View style={styles.profileCard}>
-        <View style={styles.avatarWrap}>
-          <View
-            style={[
-              styles.avatar,
-              { borderColor: T.border, backgroundColor: T.cardBg },
-            ]}
-          >
-            {profile.avatarUri ? (
-              <Image source={{ uri: profile.avatarUri }} style={styles.avatarImg} />
-            ) : (
-              <Ionicons name="person" size={40} color={T.mutedText} />
-            )}
-          </View>
-        </View>
-
-        <Text style={[styles.displayName, { color: T.textColor }]}>
-          {profile.username}
-        </Text>
-        <Text style={[styles.usernameSub, { color: T.mutedText }]}>
-          @{profile.username.replace(/\s+/g, "").toLowerCase() || profile.userId}
-        </Text>
-
-        {!!profile.bio && (
-          <Text style={[styles.bio, { color: T.textColor }]}>{profile.bio}</Text>
-        )}
-
-        <View style={[styles.metaBlock, { borderTopColor: T.border }]}>
-          {!!profile.location && (
-            <Text style={[styles.meta, { color: T.mutedText }]}>
-              📍 {profile.location}
-            </Text>
-          )}
-          {!!profile.education && (
-            <Text style={[styles.meta, { color: T.mutedText }]}>
-              🎓 {profile.education}
-            </Text>
-          )}
-          {!!profile.job && (
-            <Text style={[styles.meta, { color: T.mutedText }]}>
-              💼 {profile.job}
-            </Text>
-          )}
-          {!!profile.website && (
-            <TouchableOpacity
-              onPress={() => profile.website && Linking.openURL(profile.website)}
-            >
-              <Text style={[styles.meta, { color: T.accent }]}>
-                🌐 {profile.website}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Stats row */}
-        <View style={[styles.statsRow, { borderTopColor: T.border }]}>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: T.textColor }]}>
-              {stats.followers}
-            </Text>
-            <Text style={[styles.statLabel, { color: T.mutedText }]}>
-              {t("social.followers")}
-            </Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: T.textColor }]}>
-              {stats.following}
-            </Text>
-            <Text style={[styles.statLabel, { color: T.mutedText }]}>
-              {t("social.following")}
-            </Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: T.textColor }]}>
-              {stats.posts}
-            </Text>
-            <Text style={[styles.statLabel, { color: T.mutedText }]}>
-              {t("social.posts")}
-            </Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: T.textColor }]}>
-              {stats.events}
-            </Text>
-            <Text style={[styles.statLabel, { color: T.mutedText }]}>
-              {t("social.events")}
-            </Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: T.textColor }]}>
-              {mutualConnections}
-            </Text>
-            <Text style={[styles.statLabel, { color: T.mutedText }]}>
-              {t("social.mutualConnections")}
-            </Text>
-          </View>
-        </View>
-
-        {/* Owner / Visitor actions */}
-        <View style={styles.actionsRow}>
-          {isOwner ? (
-            ownerActions.map((a) => (
-              <TouchableOpacity
-                key={a.id}
-                style={[styles.actionBtn, { backgroundColor: T.accent }]}
-                onPress={() => handleOwnerAction(a.id)}
-              >
-                <Text style={[styles.actionBtnText, { color: T.cardBg }]}>
-                  {t(a.labelKey)}
-                </Text>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <>
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: T.accent }]}
-                onPress={() => {
-                  if (!following) {
-                    addNotification({
-                      id: `follow_${Date.now()}`,
-                      type: "follow",
-                      actorUserId: "me",
-                      actorUsername: "sen",
-                      targetUserId: profile.userId,
-                      text: "seni takip etti",
-                      createdAt: new Date().toISOString(),
-                      read: false,
-                    });
-                  }
-                  toggleFollow(profile.userId);
-                }}
-              >
-                <Text style={[styles.actionBtnText, { color: T.cardBg }]}>
-                  {followButtonLabel}
-                </Text>
-              </TouchableOpacity>
-              {visitorActions
-                .filter((a) => a.id !== "follow")
-                .map((a) => (
+              <View style={styles.identityBlock}>
+                <Text style={[styles.displayName, { color: primaryText }]}>{profile.username}</Text>
+                {!!profile.bio && <Text style={[styles.bio, { color: secondaryText }]}>{profile.bio}</Text>}
+                {!!profile.website && (
                   <TouchableOpacity
-                    key={a.id}
-                    style={[
-                      styles.actionBtn,
-                      { backgroundColor: T.cardBg, borderWidth: 1, borderColor: T.border },
-                    ]}
-                    onPress={() => handleVisitorAction(a.id)}
+                    activeOpacity={0.6}
+                    onPress={() => profile.website && Linking.openURL(profile.website)}
                   >
-                    <Text style={[styles.actionBtnText, { color: T.textColor }]}>
-                      {t(a.labelKey)}
-                    </Text>
+                    <Text style={[styles.website, { color: secondaryText }]}>🌐 {profile.website}</Text>
                   </TouchableOpacity>
-                ))}
-            </>
-          )}
-        </View>
-      </View>
+                )}
+              </View>
+            </View>
 
-      {/* Tabs */}
-      <View style={[styles.tabs, { borderTopColor: T.border }]}>
-        <TabBtn
-          label={t("social.tabs.posts")}
-          active={tab === "posts"}
-          onPress={() => setTab("posts")}
-          T={T}
-        />
-        <TabBtn
-          label={t("social.tabs.videos")}
-          active={tab === "videos"}
-          onPress={() => setTab("videos")}
-          T={T}
-        />
-        <TabBtn
-          label={t("social.tabs.events")}
-          active={tab === "events"}
-          onPress={() => setTab("events")}
-          T={T}
-        />
-        <TabBtn
-          label={t("social.tabs.saved")}
-          active={tab === "saved"}
-          onPress={() => setTab("saved")}
-          T={T}
-        />
-      </View>
+            <View style={styles.rightColumn}>
+              <View style={styles.profileFacts}>
+                <View style={styles.factRow}>
+                  <Text style={[styles.factText, { color: secondaryText }]}>
+                    👤 {stats.followers} Takipçi
+                  </Text>
+                </View>
+                <View style={styles.factRow}>
+                  <Text style={[styles.factText, { color: secondaryText }]}>
+                    👥 {mutualConnections} Ortak Arkadaşlar
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  style={styles.factRow}
+                  onPress={() =>
+                    isOwner
+                      ? handleOwnerAction("createEvent")
+                      : navigation.navigate("SocialCreateEvent", undefined)
+                  }
+                >
+                  <Text style={[styles.factText, { color: secondaryText }]}>
+                    📅 Etkinlik Oluştur
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  style={styles.textAction}
+                  onPress={() => {
+                    if (!following) {
+                      addNotification({
+                        id: `follow_${Date.now()}`,
+                        type: "follow",
+                        actorUserId: "me",
+                        actorUsername: "sen",
+                        targetUserId: profile.userId,
+                        text: "seni takip etti",
+                        createdAt: new Date().toISOString(),
+                        read: false,
+                      });
+                    }
+                    toggleFollow(profile.userId);
+                  }}
+                >
+                  <Text style={[styles.textActionLabel, { color: primaryText }]}>Takip Et</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  style={styles.textAction}
+                  onPress={() => toggleFollow(profile.userId)}
+                >
+                  <Text style={[styles.textActionLabel, { color: mutedTextColor }]}>Takibi Bırak</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  style={styles.textAction}
+                  onPress={() => handleVisitorAction("blockUser")}
+                >
+                  <Text style={[styles.textActionLabel, { color: dangerText }]}>Engelle</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </LinearGradient>
+
+      <LinearGradient colors={headerGradient} style={styles.tabContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+          <TabBtn
+            label={`Gönderi ${gridPosts.length}`}
+            active={tab === "posts"}
+            onPress={() => setTab("posts")}
+            activeColor={primaryText}
+            inactiveColor={mutedTextColor}
+          />
+          <TabBtn
+            label={`Videolar ${videoPosts.length}`}
+            active={tab === "videos"}
+            onPress={() => setTab("videos")}
+            activeColor={primaryText}
+            inactiveColor={mutedTextColor}
+          />
+          <TabBtn
+            label={`Etkinlikler ${userEvents.length}`}
+            active={tab === "events"}
+            onPress={() => setTab("events")}
+            activeColor={primaryText}
+            inactiveColor={mutedTextColor}
+          />
+          <TabBtn
+            label={`Kaydedilenler ${savedPosts.length}`}
+            active={tab === "saved"}
+            onPress={() => setTab("saved")}
+            activeColor={primaryText}
+            inactiveColor={mutedTextColor}
+          />
+          <TabBtn
+            label="Paylaşım Yap"
+            active={false}
+            onPress={() =>
+              isOwner ? handleOwnerAction("addStory") : handleVisitorAction("shareProfile")
+            }
+            activeColor={primaryText}
+            inactiveColor={mutedTextColor}
+          />
+          <TabBtn
+            label="Profili Düzenle"
+            active={false}
+            onPress={() => (isOwner ? handleOwnerAction("editProfile") : undefined)}
+            activeColor={primaryText}
+            inactiveColor={mutedTextColor}
+          />
+        </ScrollView>
+      </LinearGradient>
     </View>
   );
 
-  /* --------------- LIST DATA --------------- */
-
   const isEventsTab = tab === "events";
-  const postData =
-    tab === "posts" ? gridPosts : tab === "videos" ? videoPosts : savedPosts;
+  const postData = tab === "posts" ? gridPosts : tab === "videos" ? videoPosts : savedPosts;
 
   const renderPostItem = useCallback(
     ({ item }: { item: SocialPost }) => {
@@ -369,9 +294,7 @@ export default function SocialProfileContainerScreen() {
         <TouchableOpacity
           style={[styles.gridItem, { backgroundColor: T.cardBg }]}
           activeOpacity={0.9}
-          onPress={() =>
-            navigation.navigate("SocialPostDetail", { postId: item.id })
-          }
+          onPress={() => navigation.navigate("SocialPostDetail", { postId: item.id })}
         >
           {media?.uri ? (
             <Image source={{ uri: media.uri }} style={styles.gridImg} />
@@ -391,9 +314,7 @@ export default function SocialProfileContainerScreen() {
       <TouchableOpacity
         style={[styles.gridItem, styles.eventCard, { backgroundColor: T.cardBg }]}
         activeOpacity={0.9}
-        onPress={() =>
-          navigation.navigate("SocialEventDetail", { eventId: item.id })
-        }
+        onPress={() => navigation.navigate("SocialEventDetail", { eventId: item.id })}
       >
         {item.coverImage ? (
           <Image source={{ uri: item.coverImage }} style={styles.eventCover} />
@@ -489,22 +410,21 @@ function TabBtn({
   label,
   active,
   onPress,
-  T,
+  activeColor,
+  inactiveColor,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
-  T: ReturnType<typeof useAppTheme>;
+  activeColor: string;
+  inactiveColor: string;
 }) {
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={[styles.tabBtn, active && { borderBottomWidth: 2, borderBottomColor: T.accent }]}
-    >
+    <TouchableOpacity activeOpacity={0.6} onPress={onPress} style={styles.tabBtn}>
       <Text
         style={[
           styles.tabLabel,
-          { color: active ? T.textColor : T.mutedText },
+          { color: active ? activeColor : inactiveColor },
         ]}
         numberOfLines={1}
       >
@@ -516,92 +436,121 @@ function TabBtn({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-
-  headerWrap: { paddingBottom: 8 },
-
-  coverContainer: { height: 140 },
-  cover: { width: "100%", height: "100%" },
-  coverSettings: {
-    position: "absolute",
-    right: 12,
-    top: 12,
-    padding: 8,
-    borderRadius: 20,
+  headerWrap: { paddingBottom: 0 },
+  headerContainer: {
+    paddingBottom: 10,
   },
-
+  tabContainer: {
+    paddingBottom: 8,
+  },
   profileCard: {
-    paddingHorizontal: 16,
-    marginTop: -56,
-    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingTop: 18,
   },
-
-  avatarWrap: { marginBottom: 8 },
+  headerContentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  leftColumn: {
+    width: 130,
+    alignItems: "flex-start",
+    flexShrink: 0,
+  },
+  rightColumn: {
+    flex: 0,
+    width: "58%",
+    minWidth: 0,
+    paddingTop: 2,
+    alignItems: "flex-end",
+  },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 100 * 0.25,
-    borderWidth: 3,
+    width: 68,
+    height: 68,
+    borderRadius: 16,
+    borderWidth: 1,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarImg: { width: "100%", height: "100%", borderRadius: 100 * 0.25 },
-
-  displayName: { fontSize: 20, fontWeight: "800" },
-  usernameSub: { fontSize: 13, marginTop: 2 },
-  bio: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: "center",
-    paddingHorizontal: 8,
-    lineHeight: 20,
-  },
-
-  metaBlock: {
+  avatarImg: { width: "100%", height: "100%", borderRadius: 16 },
+  profileFacts: {
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
     width: "100%",
+  },
+  factRow: {
+    minHeight: 26,
+    justifyContent: "center",
+  },
+  factText: {
+    fontSize: 13.5,
+    fontWeight: "400",
+    letterSpacing: 0.24,
+    opacity: 0.85,
+  },
+  identityBlock: {
     marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
     gap: 4,
-  },
-  meta: { fontSize: 13 },
-
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
     width: "100%",
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: 1,
   },
-  stat: { alignItems: "center" },
-  statValue: { fontSize: 16, fontWeight: "800" },
-  statLabel: { fontSize: 11, marginTop: 2 },
-
+  displayName: {
+    fontSize: 16.5,
+    fontWeight: "500",
+    letterSpacing: 0.3,
+  },
+  bio: {
+    fontSize: 13,
+    fontWeight: "300",
+    lineHeight: 17,
+    letterSpacing: 0.24,
+    opacity: 0.72,
+  },
+  website: {
+    fontSize: 13,
+    fontWeight: "400",
+    letterSpacing: 0.22,
+    opacity: 0.84,
+  },
   actionsRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 10,
-    marginTop: 14,
+    alignItems: "center",
+    marginTop: 8,
+    flexWrap: "nowrap",
+    width: "100%",
   },
-  actionBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+  textAction: {
+    marginRight: 18,
   },
-  actionBtnText: { fontSize: 13, fontWeight: "700" },
-
+  textActionLabel: {
+    fontSize: 14,
+    fontWeight: "400",
+    letterSpacing: 0.24,
+    opacity: 0.88,
+  },
   tabs: {
     flexDirection: "row",
-    borderTopWidth: 1,
-    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 6,
+    flexWrap: "nowrap",
+    alignItems: "center",
   },
-  tabBtn: { flex: 1, paddingVertical: 12, alignItems: "center" },
-  tabLabel: { fontSize: 11, fontWeight: "700" },
-
-  listContent: { paddingBottom: 40 },
-
+  tabBtn: {
+    paddingVertical: 6,
+    marginRight: 20,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+    flexShrink: 0,
+  },
+  tabLabel: {
+    fontSize: 13.5,
+    fontWeight: "400",
+    letterSpacing: 0.22,
+  },
+  listContent: { paddingBottom: 40, flexGrow: 1 },
   gridItem: {
     width: "33.33%",
     aspectRatio: 1,
@@ -614,7 +563,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   eventCard: { overflow: "hidden" },
   eventCover: { width: "100%", height: "80%", borderRadius: 4 },
   eventCoverPlaceholder: {
@@ -626,7 +574,6 @@ const styles = StyleSheet.create({
   },
   eventTitleWrap: { flex: 1, padding: 4, justifyContent: "center" },
   eventTitle: { fontSize: 10, fontWeight: "700" },
-
   suggestedSection: {
     borderTopWidth: 1,
     marginTop: 24,
