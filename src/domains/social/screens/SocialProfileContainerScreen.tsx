@@ -2,9 +2,9 @@
 // FAZ 1 – Profil üst kartı, sekmeler, sahip/ziyaretçi aksiyonları, gerçek veri
 
 import { Ionicons } from "@expo/vector-icons";
+import type { RouteProp } from "@react-navigation/native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { RouteProp } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -27,22 +27,22 @@ import SocialSuggestedUserCard, {
 import { useSocialProfile } from "../hooks/useSocialProfile";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import {
+  socialEventService,
+  type SocialEvent,
+} from "../services/socialEventService";
+import {
+  getPostsByUser,
+  getSavedPosts,
+  subscribeFeed,
+} from "../services/socialFeedStateService";
+import {
   getMutualConnections,
   getSuggestedUsers,
   isFollowing,
   subscribeFollow,
   toggleFollow,
 } from "../services/socialFollowService";
-import {
-  getPostsByUser,
-  getSavedPosts,
-  subscribeFeed,
-} from "../services/socialFeedStateService";
 import { addNotification } from "../services/socialNotificationService";
-import {
-  socialEventService,
-  type SocialEvent,
-} from "../services/socialEventService";
 import type { SocialPost } from "../types/social.types";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
@@ -98,7 +98,7 @@ export default function SocialProfileContainerScreen() {
   );
   const savedPosts = isOwner ? savedList : [];
   const mutualConnections = isOwner ? 0 : getMutualConnections(profile.userId);
-  const primaryText = T.isDark ? "#FFFFFF" : "#0f172a";
+  const primaryText = T.isDark ? "#FFFFFF" : "#000000";
   const secondaryText = T.isDark
     ? "rgba(255,255,255,0.75)"
     : "rgba(15,23,42,0.75)";
@@ -106,6 +106,8 @@ export default function SocialProfileContainerScreen() {
     ? "rgba(255,255,255,0.55)"
     : "rgba(15,23,42,0.55)";
   const dangerText = T.isDark ? "#ff6b6b" : "#e11d48";
+  const tabUnderlineColor = T.isDark ? "#00bfff" : "#1834ae";
+  const websiteColor = T.isDark ? "#00bfff" : "#1834ae";
   const headerGradient = useMemo(
     () =>
       T.isDark
@@ -150,13 +152,24 @@ export default function SocialProfileContainerScreen() {
 
               <View style={styles.identityBlock}>
                 <Text style={[styles.displayName, { color: primaryText }]}>{profile.username}</Text>
-                {!!profile.bio && <Text style={[styles.bio, { color: secondaryText }]}>{profile.bio}</Text>}
+                {!!profile.bio && (
+                  <Text style={[styles.baseText, { color: secondaryText }]}>{profile.bio}</Text>
+                )}
                 {!!profile.website && (
                   <TouchableOpacity
                     activeOpacity={0.6}
                     onPress={() => profile.website && Linking.openURL(profile.website)}
                   >
-                    <Text style={[styles.website, { color: secondaryText }]}>🌐 {profile.website}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Ionicons
+                        name="globe-outline"
+                        size={14}
+                        color={websiteColor}
+                      />
+                      <Text style={[styles.baseText, { color: websiteColor }]}>
+                        {profile.website}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 )}
               </View>
@@ -164,32 +177,27 @@ export default function SocialProfileContainerScreen() {
 
             <View style={styles.rightColumn}>
               <View style={styles.profileFacts}>
-                <View style={styles.factRow}>
-                  <Text style={[styles.factText, { color: secondaryText }]}>
-                    👤 {stats.followers} Takipçi
+                <View style={[styles.factRow, { marginLeft: "auto", marginRight: 60 }]}>
+                  <Text style={[styles.baseText, { color: primaryText }]}>
+                    👤 Takipçi {stats.followers}
                   </Text>
                 </View>
-                <View style={styles.factRow}>
-                  <Text style={[styles.factText, { color: secondaryText }]}>
-                    👥 {mutualConnections} Ortak Arkadaşlar
+                <View style={[styles.factRow, { marginLeft: "auto", marginRight: -2 }]}>
+                  <Text style={[styles.baseText, { color: primaryText }]}>
+                    👥 Ortak Arkadaşlar {mutualConnections}
                   </Text>
                 </View>
                 <TouchableOpacity
-                  activeOpacity={0.6}
-                  style={styles.factRow}
-                  onPress={() =>
-                    isOwner
-                      ? handleOwnerAction("createEvent")
-                      : navigation.navigate("SocialCreateEvent", undefined)
-                  }
-                >
-                  <Text style={[styles.factText, { color: secondaryText }]}>
-                    📅 Etkinlik Oluştur
-                  </Text>
-                </TouchableOpacity>
+  activeOpacity={0.6}
+  style={[styles.factRow, { marginLeft: "auto", marginRight: 20 }]}
+>
+  <Text style={[styles.baseText, { color: primaryText }]}>
+    📅 Etkinlik Oluştur
+  </Text>
+</TouchableOpacity>
               </View>
 
-              <View style={styles.actionsRow}>
+              <View style={[styles.actionsRow, { marginLeft: "auto", marginRight: -16 }]}>
                 <TouchableOpacity
                   activeOpacity={0.6}
                   style={styles.textAction}
@@ -209,7 +217,9 @@ export default function SocialProfileContainerScreen() {
                     toggleFollow(profile.userId);
                   }}
                 >
-                  <Text style={[styles.textActionLabel, { color: primaryText }]}>Takip Et</Text>
+                  <Text style={[styles.baseText, { color: primaryText }]}>
+                    Takip Et
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -217,7 +227,9 @@ export default function SocialProfileContainerScreen() {
                   style={styles.textAction}
                   onPress={() => toggleFollow(profile.userId)}
                 >
-                  <Text style={[styles.textActionLabel, { color: mutedTextColor }]}>Takibi Bırak</Text>
+                  <Text style={[styles.baseText, { color: primaryText }]}>
+                    Takibi Bırak
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -225,7 +237,9 @@ export default function SocialProfileContainerScreen() {
                   style={styles.textAction}
                   onPress={() => handleVisitorAction("blockUser")}
                 >
-                  <Text style={[styles.textActionLabel, { color: dangerText }]}>Engelle</Text>
+                  <Text style={[styles.baseText, { color: dangerText }]}>
+                    Engelle
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -241,6 +255,7 @@ export default function SocialProfileContainerScreen() {
             onPress={() => setTab("posts")}
             activeColor={primaryText}
             inactiveColor={mutedTextColor}
+            tabUnderlineColor={tabUnderlineColor}
           />
           <TabBtn
             label={`Videolar ${videoPosts.length}`}
@@ -248,6 +263,7 @@ export default function SocialProfileContainerScreen() {
             onPress={() => setTab("videos")}
             activeColor={primaryText}
             inactiveColor={mutedTextColor}
+            tabUnderlineColor={tabUnderlineColor}
           />
           <TabBtn
             label={`Etkinlikler ${userEvents.length}`}
@@ -255,6 +271,7 @@ export default function SocialProfileContainerScreen() {
             onPress={() => setTab("events")}
             activeColor={primaryText}
             inactiveColor={mutedTextColor}
+            tabUnderlineColor={tabUnderlineColor}
           />
           <TabBtn
             label={`Kaydedilenler ${savedPosts.length}`}
@@ -262,6 +279,7 @@ export default function SocialProfileContainerScreen() {
             onPress={() => setTab("saved")}
             activeColor={primaryText}
             inactiveColor={mutedTextColor}
+            tabUnderlineColor={tabUnderlineColor}
           />
           <TabBtn
             label="Paylaşım Yap"
@@ -271,6 +289,7 @@ export default function SocialProfileContainerScreen() {
             }
             activeColor={primaryText}
             inactiveColor={mutedTextColor}
+            tabUnderlineColor={tabUnderlineColor}
           />
           <TabBtn
             label="Profili Düzenle"
@@ -278,6 +297,7 @@ export default function SocialProfileContainerScreen() {
             onPress={() => (isOwner ? handleOwnerAction("editProfile") : undefined)}
             activeColor={primaryText}
             inactiveColor={mutedTextColor}
+            tabUnderlineColor={tabUnderlineColor}
           />
         </ScrollView>
       </LinearGradient>
@@ -412,12 +432,14 @@ function TabBtn({
   onPress,
   activeColor,
   inactiveColor,
+  tabUnderlineColor,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
   activeColor: string;
   inactiveColor: string;
+  tabUnderlineColor: string;
 }) {
   return (
     <TouchableOpacity activeOpacity={0.6} onPress={onPress} style={styles.tabBtn}>
@@ -430,6 +452,14 @@ function TabBtn({
       >
         {label}
       </Text>
+      {active && (
+        <View
+          style={[
+            styles.tabUnderline,
+            { backgroundColor: tabUnderlineColor },
+          ]}
+        />
+      )}
     </TouchableOpacity>
   );
 }
@@ -463,7 +493,7 @@ const styles = StyleSheet.create({
     width: "58%",
     minWidth: 0,
     paddingTop: 2,
-    alignItems: "flex-end",
+     alignItems: "flex-start",
   },
   avatar: {
     width: 68,
@@ -477,76 +507,64 @@ const styles = StyleSheet.create({
   avatarImg: { width: "100%", height: "100%", borderRadius: 16 },
   profileFacts: {
     justifyContent: "flex-start",
-    alignItems: "flex-start",
+    alignItems: "flex-end",
     width: "100%",
   },
   factRow: {
+    flexDirection: "row",
+    alignItems: "center",
     minHeight: 26,
-    justifyContent: "center",
-  },
-  factText: {
-    fontSize: 13.5,
-    fontWeight: "400",
-    letterSpacing: 0.24,
-    opacity: 0.85,
   },
   identityBlock: {
-    marginTop: 12,
+    marginTop: 10,
     gap: 4,
     width: "100%",
   },
-  displayName: {
-    fontSize: 16.5,
+  baseText: {
+    fontSize: 12.8,
     fontWeight: "500",
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
-  bio: {
-    fontSize: 13,
-    fontWeight: "300",
-    lineHeight: 17,
-    letterSpacing: 0.24,
-    opacity: 0.72,
-  },
-  website: {
-    fontSize: 13,
+  displayName: {
+    fontSize: 16,
     fontWeight: "400",
-    letterSpacing: 0.22,
-    opacity: 0.84,
+    letterSpacing: 0.24,
   },
   actionsRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 56,
     flexWrap: "nowrap",
-    width: "100%",
+    justifyContent: "flex-end",
   },
   textAction: {
-    marginRight: 18,
-  },
-  textActionLabel: {
-    fontSize: 14,
-    fontWeight: "400",
-    letterSpacing: 0.24,
-    opacity: 0.88,
+    marginRight: 8,
   },
   tabs: {
     flexDirection: "row",
-    paddingHorizontal: 18,
-    paddingTop: 8,
-    paddingBottom: 6,
+    paddingHorizontal: 10,
+    paddingTop: 2,
+    paddingBottom: 0,
     flexWrap: "nowrap",
     alignItems: "center",
   },
   tabBtn: {
     paddingVertical: 6,
-    marginRight: 20,
+    marginRight: 18,
     alignItems: "flex-start",
     justifyContent: "center",
     alignSelf: "flex-start",
     flexShrink: 0,
   },
+  tabUnderline: {
+    marginTop: 2,
+    height: 1.5,
+    borderRadius: 2,
+    alignSelf: "flex-start",
+    width: "100%",
+  },
   tabLabel: {
-    fontSize: 13.5,
+    fontSize: 12,
     fontWeight: "400",
     letterSpacing: 0.22,
   },
