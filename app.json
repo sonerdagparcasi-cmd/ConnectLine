@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "ConnectLine",
+    "slug": "connectline",
+    "scheme": "connectline",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "jsEngine": "hermes",
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "android": {
+      "package": "com.sonerrndv.connectline"
+    },
+    "ios": {
+      "bundleIdentifier": "com.sonerrndv.connectline"
+    }
+  }
+}

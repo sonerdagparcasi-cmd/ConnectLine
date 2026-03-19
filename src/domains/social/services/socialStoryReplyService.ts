@@ -1,0 +1,161 @@
+// src/domains/social/services/socialStoryReplyService.ts
+// 🔒 SOCIAL STORY REPLY SERVICE – UI ONLY
+// PURPOSE:
+// - story reply system
+// - emoji reaction
+// - reply inbox
+// - owner analytics ready
+// ARCHITECTURE SAFE
+
+import type { SocialStory } from "../types/social.types";
+/* ------------------------------------------------------------------ */
+/* TYPES                                                              */
+/* ------------------------------------------------------------------ */
+
+export type SocialStoryReplyType =
+  | "message"
+  | "reaction";
+
+export type SocialStoryReply = {
+  id: string;
+
+  storyId: string;
+
+  senderUserId: string;
+  senderUsername: string;
+
+  type: SocialStoryReplyType;
+
+  message?: string;
+  reaction?: string;
+
+  createdAt: string;
+};
+
+/* ------------------------------------------------------------------ */
+/* STORE (UI ONLY)                                                    */
+/* ------------------------------------------------------------------ */
+
+let STORY_REPLIES: Record<string, SocialStoryReply[]> = {};
+
+/* ------------------------------------------------------------------ */
+/* HELPERS                                                            */
+/* ------------------------------------------------------------------ */
+
+function generateId() {
+  return "reply_" + Math.random().toString(36).slice(2);
+}
+
+/* ------------------------------------------------------------------ */
+/* ADD MESSAGE REPLY                                                  */
+/* ------------------------------------------------------------------ */
+
+export function addStoryReply(
+  storyId: string,
+  senderUserId: string,
+  senderUsername: string,
+  message: string
+) {
+  const reply: SocialStoryReply = {
+    id: generateId(),
+    storyId,
+    senderUserId,
+    senderUsername,
+    type: "message",
+    message,
+    createdAt: new Date().toISOString(),
+  };
+
+  const existing = STORY_REPLIES[storyId] ?? [];
+
+  STORY_REPLIES = {
+    ...STORY_REPLIES,
+    [storyId]: [reply, ...existing],
+  };
+
+  return reply;
+}
+
+/* ------------------------------------------------------------------ */
+/* ADD EMOJI REACTION                                                 */
+/* ------------------------------------------------------------------ */
+
+export function addStoryReaction(
+  storyId: string,
+  senderUserId: string,
+  senderUsername: string,
+  reaction: string
+) {
+  const reply: SocialStoryReply = {
+    id: generateId(),
+    storyId,
+    senderUserId,
+    senderUsername,
+    type: "reaction",
+    reaction,
+    createdAt: new Date().toISOString(),
+  };
+
+  const existing = STORY_REPLIES[storyId] ?? [];
+
+  STORY_REPLIES = {
+    ...STORY_REPLIES,
+    [storyId]: [reply, ...existing],
+  };
+
+  return reply;
+}
+
+/* ------------------------------------------------------------------ */
+/* GET STORY REPLIES                                                  */
+/* ------------------------------------------------------------------ */
+
+export function getStoryReplies(storyId: string) {
+  return STORY_REPLIES[storyId] ?? [];
+}
+
+/* ------------------------------------------------------------------ */
+/* GET OWNER INBOX                                                    */
+/* ------------------------------------------------------------------ */
+
+export function getRepliesForStories(
+  stories: SocialStory[]
+) {
+  const ids = new Set(stories.map((s) => s.id));
+
+  const replies: SocialStoryReply[] = [];
+
+  Object.values(STORY_REPLIES).forEach((list) => {
+    list.forEach((reply) => {
+      if (ids.has(reply.storyId)) {
+        replies.push(reply);
+      }
+    });
+  });
+
+  return replies.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() -
+      new Date(a.createdAt).getTime()
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* GET STORY REPLY COUNT                                              */
+/* ------------------------------------------------------------------ */
+
+export function getStoryReplyCount(storyId: string) {
+  const list = STORY_REPLIES[storyId];
+
+  if (!list) return 0;
+
+  return list.length;
+}
+
+/* ------------------------------------------------------------------ */
+/* RESET (DEV TOOL)                                                   */
+/* ------------------------------------------------------------------ */
+
+export function resetStoryReplies() {
+  STORY_REPLIES = {};
+}
