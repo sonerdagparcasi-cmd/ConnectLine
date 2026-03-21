@@ -2,7 +2,7 @@
 // 🔒 SOCIAL PROFILE STORE (UI ONLY - LIVE UPDATE)
 // UPDATED: Follow system support (ADIM 1)
 
-type SocialProfile = {
+export type SocialProfile = {
   userId: string;
 
   username: string;
@@ -225,3 +225,16 @@ export const socialProfileStore = {
     };
   },
 };
+
+/* ------------------------------------------------ */
+/* NAMED EXPORT HELPERS (TEK KAYNAK)               */
+/* ------------------------------------------------ */
+
+export function updateProfile(patch: Partial<SocialProfile>) {
+  profile = { ...profile, ...patch };
+  notify();
+}
+
+export function subscribeProfile(listener: Listener) {
+  return socialProfileStore.subscribe(listener);
+}

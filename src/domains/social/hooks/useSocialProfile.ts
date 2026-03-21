@@ -6,7 +6,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { socialProfileStore } from "../state/socialProfileStore";
+import {
+  socialProfileStore,
+  subscribeProfile,
+  updateProfile as storeUpdateProfile,
+} from "../state/socialProfileStore";
 import {
   getPostsByUser,
   subscribeFeed,
@@ -64,8 +68,8 @@ export function useSocialProfile(profileUserId?: string) {
   );
 
   useEffect(() => {
-    const unsubscribe = socialProfileStore.subscribe(setProfileState);
-    return unsubscribe;
+    const unsub = subscribeProfile(setProfileState);
+    return unsub;
   }, []);
 
   /* ------------------------------------------------------------------ */
@@ -96,6 +100,8 @@ export function useSocialProfile(profileUserId?: string) {
     }
     return {
       ...me,
+      username: profileState.username,
+      avatarUri: profileState.avatarUri,
       coverUri: profileState.coverUri,
       bio: profileState.bio,
       job: profileState.job,
@@ -110,7 +116,7 @@ export function useSocialProfile(profileUserId?: string) {
   /* ------------------------------------------------------------------ */
 
   function updateProfile(next: Partial<ProfileState>) {
-    socialProfileStore.updateProfile(next);
+    storeUpdateProfile(next as any);
   }
 
   /* ------------------------------------------------------------------ */

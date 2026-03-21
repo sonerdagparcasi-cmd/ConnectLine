@@ -96,7 +96,7 @@ export default function SocialProfileContainerScreen() {
     () => feedPosts.filter((p) => p.media?.some((m) => m.type === "video")),
     [feedPosts]
   );
-  const savedPosts = isOwner ? savedList : [];
+  const savedPosts = savedList;
   const mutualConnections = isOwner ? 0 : getMutualConnections(profile.userId);
   const primaryText = T.isDark ? "#FFFFFF" : "#000000";
   const secondaryText = T.isDark
@@ -190,6 +190,7 @@ export default function SocialProfileContainerScreen() {
                 <TouchableOpacity
   activeOpacity={0.6}
   style={[styles.factRow, { marginLeft: "auto", marginRight: 20 }]}
+  onPress={() => navigation.navigate("SocialCreateEvent")}
 >
   <Text style={[styles.baseText, { color: primaryText }]}>
     📅 Etkinlik Oluştur
@@ -285,7 +286,9 @@ export default function SocialProfileContainerScreen() {
             label="Paylaşım Yap"
             active={false}
             onPress={() =>
-              isOwner ? handleOwnerAction("addStory") : handleVisitorAction("shareProfile")
+              isOwner
+                ? navigation.navigate("SocialCreatePost")
+                : handleVisitorAction("shareProfile")
             }
             activeColor={primaryText}
             inactiveColor={mutedTextColor}

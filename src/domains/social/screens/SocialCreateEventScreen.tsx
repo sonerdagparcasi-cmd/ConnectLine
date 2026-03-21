@@ -134,6 +134,31 @@ export default function SocialCreateEventScreen() {
         });
 
         Alert.alert("Başarılı", "Etkinlik oluşturuldu");
+        // List UI'nin otomatik refresh alması için önce geri dön, sonra önceki route'u
+        // yeni key ile tekrar mount ettir.
+        const navState = navigation.getState?.();
+        const routes = navState?.routes as
+          | Array<{ name?: string; key?: string; params?: unknown }>
+          | undefined;
+        const prevRoute = routes?.[routes.length - 2];
+        const prevName = prevRoute?.name;
+        const prevParams = prevRoute?.params;
+
+        navigation.goBack();
+        if (prevName) {
+          setTimeout(() => {
+            try {
+              navigation.navigate({
+                name: prevName,
+                params: prevParams as any,
+                key: `${prevName}_${Date.now()}`,
+              });
+            } catch {
+              // Fallback: sadece geri dön.
+            }
+          }, 0);
+        }
+        return;
       }
 
       navigation.goBack();

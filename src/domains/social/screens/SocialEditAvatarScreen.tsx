@@ -18,7 +18,7 @@ import {
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import { useSocialProfile } from "../hooks/useSocialProfile";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
-import { socialProfileStore } from "../state/socialProfileStore";
+import { updateProfile } from "../state/socialProfileStore";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
 
@@ -53,7 +53,9 @@ export default function SocialEditAvatarScreen() {
   }
 
   function saveAvatar() {
-    socialProfileStore.setAvatar(avatarUri);
+    updateProfile({
+      avatarUri,
+    });
     navigation.goBack();
   }
 
