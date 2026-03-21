@@ -2,6 +2,7 @@
 // 🔒 SOCIAL STORY STATE – UI-ONLY (domain isolated)
 
 import type { SocialStory } from "../../types/social.types";
+import { clearRepliesForStory } from "../../services/socialStoryReplyService";
 
 const MOCK_USERS = [
   {
@@ -83,6 +84,19 @@ let STORIES: SocialStory[] = [];
 let userStories: SocialStory[] = [];
 const storyIdIndex = new Set<string>();
 
+let storyListeners: Array<() => void> = [];
+
+function emitStoryChange() {
+  storyListeners.forEach((l) => l());
+}
+
+export function subscribeStories(listener: () => void) {
+  if (!storyListeners.includes(listener)) storyListeners.push(listener);
+  return () => {
+    storyListeners = storyListeners.filter((l) => l !== listener);
+  };
+}
+
 function ensureMeta(storyId: string): StoryMeta {
   if (!metaByStoryId[storyId]) {
     metaByStoryId[storyId] = { seenBy: [], likedBy: [] };
@@ -102,7 +116,9 @@ export function isStoryExpired(createdAtISO: string) {
 }
 
 export function markStoryViewed(storyId: string) {
+  if (viewedStories.has(storyId)) return;
   viewedStories.add(storyId);
+  emitStoryChange();
 }
 
 export function isStoryViewed(storyId: string, ownerUserId?: string, currentUserId?: string) {
@@ -124,10 +140,14 @@ export function getStories(): SocialStory[] {
 export function addStory(
   story: Omit<SocialStory, "createdAt"> & { createdAt?: string }
 ) {
-  userStories = upsertStory(userStories, {
+  const next = upsertStory(userStories, {
     ...story,
     createdAt: story.createdAt ?? new Date().toISOString(),
   } as SocialStory);
+  if (next !== userStories) {
+    userStories = next;
+    emitStoryChange();
+  }
 }
 
 export function deleteStory(storyId: string) {
@@ -135,11 +155,16 @@ export function deleteStory(storyId: string) {
   viewedStories.delete(storyId);
   storyIdIndex.delete(storyId);
   delete metaByStoryId[storyId];
+  delete storyViewers[storyId];
+  clearRepliesForStory(storyId);
+  emitStoryChange();
 }
 
 export function markStorySeen(storyId: string, viewerUserId: string) {
   const meta = ensureMeta(storyId);
-  if (!meta.seenBy.includes(viewerUserId)) meta.seenBy.push(viewerUserId);
+  if (meta.seenBy.includes(viewerUserId)) return;
+  meta.seenBy.push(viewerUserId);
+  emitStoryChange();
 }
 
 /** Compatibility: record viewer list for insights */
@@ -150,6 +175,7 @@ export function addStoryView(storyId: string, viewerUserId: string, viewerUserna
     ...list,
     { userId: viewerUserId, username: viewerUsername, seenAt: new Date().toISOString() },
   ];
+  emitStoryChange();
 }
 
 export function getStoryViewers(storyId: string): StoryViewEntry[] {
@@ -163,6 +189,7 @@ export function toggleLike(storyId: string, userId: string) {
   } else {
     meta.likedBy.push(userId);
   }
+  emitStoryChange();
 }
 
 export function addReaction(storyId: string, userId: string, emoji: string) {
@@ -174,6 +201,7 @@ export function addReaction(storyId: string, userId: string, emoji: string) {
     emoji,
     createdAt: new Date().toISOString(),
   });
+  emitStoryChange();
 }
 
 export function getStoryMeta(storyId: string): StoryMeta {

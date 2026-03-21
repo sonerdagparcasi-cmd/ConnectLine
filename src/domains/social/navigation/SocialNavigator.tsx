@@ -10,6 +10,7 @@ import SocialCreatePostScreen from "../screens/SocialCreatePostScreen";
 import SocialFeedScreen from "../screens/SocialFeedScreen";
 import SocialMediaPreviewScreen from "../screens/SocialMediaPreviewScreen";
 import SocialPostDetailScreen from "../screens/SocialPostDetailScreen";
+import SocialEditPostScreen from "../screens/SocialEditPostScreen";
 import SocialProfileContainerScreen from "../screens/SocialProfileContainerScreen";
 import SocialFollowListScreen from "../screens/SocialFollowListScreen";
 import SocialFollowRequestsScreen from "../screens/SocialFollowRequestsScreen";
@@ -77,6 +78,7 @@ export type SocialStackParamList = {
 
   SocialCreatePost: { editingPostId?: string } | undefined;
   SocialPostDetail: { postId: string };
+  SocialEditPost: { postId: string };
 
   SocialMediaPreview: {
     media: SocialMediaItem[];
@@ -189,6 +191,8 @@ export default function SocialNavigator({ entry = "feed" }: Props) {
       <Stack.Screen name="SocialCreatePost" component={SocialCreatePostScreen} />
 
       <Stack.Screen name="SocialPostDetail" component={SocialPostDetailScreen} />
+
+      <Stack.Screen name="SocialEditPost" component={SocialEditPostScreen} />
 
       {/* MEDIA */}
       <Stack.Screen name="SocialMediaPreview" component={SocialMediaPreviewScreen} />

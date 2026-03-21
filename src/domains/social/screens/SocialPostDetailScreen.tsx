@@ -6,8 +6,9 @@
 // - Layout sistemi
 
 import { Ionicons } from "@expo/vector-icons";
-import { useRoute } from "@react-navigation/native";
-import { useEffect, useState } from "react";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -28,18 +29,21 @@ import SocialScreenLayout from "../components/SocialScreenLayout";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 
 import {
-  addComment,
   canAddComment,
-  getComments,
   getPostById,
   isPostSaved,
   subscribeFeed,
   toggleLike as toggleLikePost,
   toggleSavedPost,
 } from "../services/socialFeedStateService";
+import { addComment, getComments } from "../services/socialCommentService";
+import {
+  getCurrentSocialUserId,
+  isBlocked,
+  subscribeFollow,
+} from "../services/socialFollowService";
 
-import { addNotification } from "../services/socialNotificationService";
-
+import { SOCIAL_LIKE_ACTIVE_COLOR } from "../constants/socialInteraction";
 import type { SocialComment, SocialPost } from "../types/social.types";
 
 /* ------------------------------------------------------------------ */
@@ -47,6 +51,7 @@ import type { SocialComment, SocialPost } from "../types/social.types";
 /* ------------------------------------------------------------------ */
 
 type Route = RouteProp<SocialStackParamList, "SocialPostDetail">;
+type Nav = NativeStackNavigationProp<SocialStackParamList>;
 
 
 /* ------------------------------------------------------------------ */
@@ -56,6 +61,7 @@ type Route = RouteProp<SocialStackParamList, "SocialPostDetail">;
 export default function SocialPostDetailScreen() {
   const T = useAppTheme();
   const route = useRoute<Route>();
+  const navigation = useNavigation<Nav>();
 
   const { postId } = route.params;
 
@@ -66,19 +72,32 @@ export default function SocialPostDetailScreen() {
     getComments(postId)
   );
   const [input, setInput] = useState("");
+  const inputRef = useRef<TextInput>(null);
+  /** Engelle / takip grafik güncellemelerinde yeniden çizim */
+  const [, setGraphTick] = useState(0);
 
   useEffect(() => {
-    setPost(getPostById(postId));
-    setComments(getComments(postId));
-    const unsub = subscribeFeed(() => {
+    const sync = () => {
       setPost(getPostById(postId));
       setComments(getComments(postId));
+    };
+    sync();
+    const unsubFeed = subscribeFeed(sync);
+    const unsubFollow = subscribeFollow(() => {
+      sync();
+      setGraphTick((n) => n + 1);
     });
-    return unsub;
+    return () => {
+      unsubFeed();
+      unsubFollow();
+    };
   }, [postId]);
 
   const saved = post ? isPostSaved(post.id) : false;
   const liked = post?.likedByMe ?? false;
+  const commentsOpen =
+    (post?.settings?.commentsEnabled ?? post?.settings?.comments) !== false;
+  const likesVisible = post?.settings?.likesVisible !== false;
 
   function handleToggleLike() {
     if (!post) return;
@@ -114,27 +133,19 @@ export default function SocialPostDetailScreen() {
 
   function submitComment() {
     if (!input.trim() || !post) return;
+    if ((post.settings?.commentsEnabled ?? post.settings?.comments) === false) {
+      Alert.alert(t("social.notifications"), "Bu gönderide yorumlar kapalı.");
+      return;
+    }
     if (!canAddComment(post.id)) {
       Alert.alert(t("social.notifications"), t("social.restricted"));
       return;
     }
     addComment(post.id, {
-      userId: "me",
+      userId: getCurrentSocialUserId(),
       username: "Ben",
       text: input.trim(),
     });
-    addNotification({
-      id: `comment_${Date.now()}`,
-      type: "comment",
-      actorUserId: "me",
-      actorUsername: "Ben",
-      targetUserId: post.userId,
-      postId: post.id,
-      text: "yorum yaptı",
-      createdAt: new Date().toISOString(),
-      read: false,
-    });
-    setComments(getComments(post.id));
     setInput("");
   }
 
@@ -150,10 +161,63 @@ export default function SocialPostDetailScreen() {
     );
   }
 
-  const heartColor = liked ? T.accent : T.textColor;
+  const isOwner = post.userId === getCurrentSocialUserId();
+
+  if (!isOwner && isBlocked(post.userId)) {
+    return (
+      <SocialScreenLayout title={t("social.postDetail.title")}>
+        <View style={styles.archivedBox}>
+          <Text style={[styles.archivedTitle, { color: T.textColor }]}>
+            Bu kullanıcıyı engellediniz.
+          </Text>
+          <Text style={[styles.archivedSub, { color: T.mutedText }]}>
+            Gönderi gizlendi. Engeli kaldırmak için profil ayarlarından yönetebilirsiniz.
+          </Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.archivedBack}>
+            <Text style={{ color: T.mutedText, fontSize: 14, fontWeight: "600" }}>Geri</Text>
+          </TouchableOpacity>
+        </View>
+      </SocialScreenLayout>
+    );
+  }
+
+  if (post.archived) {
+    return (
+      <SocialScreenLayout title={t("social.postDetail.title")}>
+        <View style={styles.archivedBox}>
+          <Text style={[styles.archivedTitle, { color: T.textColor }]}>
+            Bu paylaşım arşivlendi.
+          </Text>
+          <Text style={[styles.archivedSub, { color: T.mutedText }]}>
+            {isOwner
+              ? "Düzenleyerek tekrar yayına alabilir veya silebilirsiniz."
+              : "Bu içerik şu an görüntülenemiyor."}
+          </Text>
+          {isOwner ? (
+            <TouchableOpacity
+              onPress={() => navigation.navigate("SocialEditPost", { postId: post.id })}
+              style={styles.archivedAction}
+              hitSlop={8}
+            >
+              <Text style={{ color: T.accent, fontSize: 15, fontWeight: "700" }}>Düzenle</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.archivedBack}>
+            <Text style={{ color: T.mutedText, fontSize: 14, fontWeight: "600" }}>Geri</Text>
+          </TouchableOpacity>
+        </View>
+      </SocialScreenLayout>
+    );
+  }
+
+  const heartColor = liked ? SOCIAL_LIKE_ACTIVE_COLOR : T.textColor;
+  const canEdit = isOwner && !post.event;
+
+  const sendDisabled = !commentsOpen || !input.trim();
 
   return (
-    <SocialScreenLayout title={t("social.postDetail.title")}>
+    <SocialScreenLayout title={t("social.postDetail.title")} scroll={false}>
+      <View style={styles.screenBody}>
       {/* ================= POST HEADER ================= */}
 
       <View style={[styles.header, { borderBottomColor: T.border }]}>
@@ -191,6 +255,16 @@ export default function SocialPostDetailScreen() {
           />
         </TouchableOpacity>
 
+        {canEdit ? (
+          <TouchableOpacity
+            onPress={() => navigation.navigate("SocialEditPost", { postId: post.id })}
+            style={{ marginRight: 10 }}
+            hitSlop={8}
+          >
+            <Text style={{ color: T.accent, fontSize: 14, fontWeight: "700" }}>Düzenle</Text>
+          </TouchableOpacity>
+        ) : null}
+
         <TouchableOpacity onPress={openPostMenu}>
           <Ionicons name="ellipsis-horizontal" size={18} color={T.mutedText} />
         </TouchableOpacity>
@@ -206,24 +280,28 @@ export default function SocialPostDetailScreen() {
             color={heartColor}
           />
 
-          <Text
-            style={{
-              marginLeft: 6,
-              color: heartColor,
-              fontWeight: "900",
-            }}
-          >
-            {t("social.postDetail.like")}
-          </Text>
+          {likesVisible ? (
+            <Text
+              style={{
+                marginLeft: 6,
+                color: heartColor,
+                fontWeight: "900",
+              }}
+            >
+              {t("social.postDetail.like")}
+            </Text>
+          ) : null}
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() =>
-            Alert.alert(
-              t("social.postDetail.comment"),
-              "Yorum ekleme (UI-only)"
-            )
-          }
+          onPress={() => {
+            if (commentsOpen) inputRef.current?.focus();
+            else
+              Alert.alert(
+                t("social.notifications"),
+                "Bu gönderide yorumlar kapalı."
+              );
+          }}
           style={styles.actionBtn}
         >
           <Ionicons name="chatbubble-outline" size={20} color={T.textColor} />
@@ -234,34 +312,23 @@ export default function SocialPostDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ================= COMMENT INPUT ================= */}
-
-      <View
-        style={[
-          styles.commentInputRow,
-          { borderTopColor: T.border, borderBottomColor: T.border },
-        ]}
-      >
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder={t("social.postDetail.commentPlaceholder")}
-          placeholderTextColor={T.mutedText}
-          style={[styles.input, { color: T.textColor }]}
-        />
-
-        <TouchableOpacity onPress={submitComment}>
-          <Ionicons name="send" size={20} color={T.accent} />
-        </TouchableOpacity>
-      </View>
-
       {/* ================= COMMENTS ================= */}
 
       <FlatList
+        style={styles.commentList}
         data={comments}
         keyExtractor={(i) => i.id}
-        contentContainerStyle={{ paddingTop: 8, paddingBottom: 40 }}
+        contentContainerStyle={
+          comments.length === 0
+            ? styles.commentListEmpty
+            : { paddingTop: 8, paddingBottom: 12 }
+        }
         keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={
+          <Text style={[styles.emptyComments, { color: T.mutedText }]}>
+            Henüz yorum yok. İlk yorumu siz yazın.
+          </Text>
+        }
         renderItem={({ item }) => (
           <View style={[styles.commentRow, { borderBottomColor: T.border }]}>
             <View
@@ -324,6 +391,58 @@ export default function SocialPostDetailScreen() {
           </View>
         )}
       />
+
+      {/* ================= COMMENT INPUT ================= */}
+
+      {!commentsOpen ? (
+        <Text style={[styles.commentsClosedHint, { color: T.mutedText }]}>
+          Bu gönderide yorumlar kapalı.
+        </Text>
+      ) : null}
+
+      <View
+        style={[
+          styles.commentInputRow,
+          {
+            borderTopColor: T.border,
+            borderBottomColor: T.border,
+            opacity: commentsOpen ? 1 : 0.55,
+          },
+        ]}
+      >
+        <TextInput
+          ref={inputRef}
+          value={input}
+          onChangeText={setInput}
+          editable={commentsOpen}
+          placeholder={
+            commentsOpen
+              ? t("social.postDetail.commentPlaceholder")
+              : "Yorumlar kapalı"
+          }
+          placeholderTextColor={T.mutedText}
+          style={[
+            styles.input,
+            {
+              color: T.textColor,
+              backgroundColor: T.cardBg,
+            },
+          ]}
+        />
+
+        <TouchableOpacity
+          onPress={submitComment}
+          disabled={sendDisabled}
+          hitSlop={8}
+        >
+          <Ionicons
+            name="send"
+            size={20}
+            color={sendDisabled ? T.mutedText : T.accent}
+          />
+        </TouchableOpacity>
+      </View>
+      </View>
     </SocialScreenLayout>
   );
 }
@@ -331,6 +450,29 @@ export default function SocialPostDetailScreen() {
 /* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
+  screenBody: {
+    flex: 1,
+    minHeight: 0,
+  },
+  commentList: {
+    flex: 1,
+    minHeight: 120,
+  },
+  commentListEmpty: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingVertical: 24,
+  },
+  emptyComments: {
+    textAlign: "center",
+    fontSize: 14,
+    paddingHorizontal: 16,
+  },
+  commentsClosedHint: {
+    fontSize: 12,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -402,5 +544,26 @@ const styles = StyleSheet.create({
   commentActionBtn: {
     flexDirection: "row",
     alignItems: "center",
+  },
+
+  archivedBox: {
+    padding: 24,
+    gap: 12,
+  },
+  archivedTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  archivedSub: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  archivedAction: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+  },
+  archivedBack: {
+    alignSelf: "flex-start",
+    marginTop: 8,
   },
 });

@@ -3,7 +3,11 @@ import { Animated, FlatList, StyleSheet, View } from "react-native";
 
 import { useSocialProfile } from "../../hooks/useSocialProfile";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
-import { getStories, isStoryViewed } from "../services/socialStoryStateService";
+import {
+  getStories,
+  isStoryViewed,
+  subscribeStories,
+} from "../services/socialStoryStateService";
 import StoryAvatar from "./StoryAvatar";
 
 const ITEM_WIDTH = 76; // 64 + 12 marginRight
@@ -14,10 +18,16 @@ type Props = {
 
 export default function StoryRail({ stories }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [storyRev, setStoryRev] = useState(0);
   const { profile } = useSocialProfile();
 
-  const allStories = getStories();
-  const groups = groupStoriesByUser(allStories as any, profile.userId);
+  useEffect(() => subscribeStories(() => setStoryRev((n) => n + 1)), []);
+
+  const allStories = useMemo(() => getStories(), [storyRev]);
+  const groups = useMemo(
+    () => groupStoriesByUser(allStories as any, profile.userId),
+    [allStories, profile.userId]
+  );
 
   const meName = useMemo(() => {
     const raw = profile?.username?.trim();

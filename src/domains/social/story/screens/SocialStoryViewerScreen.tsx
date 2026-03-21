@@ -21,27 +21,32 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { switchTestUser, useSocialProfile } from "../../hooks/useSocialProfile";
-import {
-  getSocialMessages,
-  sendSocialMessage,
-} from "../../services/socialMessageService";
+import { sendSocialMessage } from "../../services/socialMessageService";
 import { useAppTheme } from "../../../../shared/theme/appTheme";
 import { addNotification } from "../../services/socialNotificationService";
+import { getCurrentSocialUserId } from "../../services/socialFollowService";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
 import {
   addReaction,
+  addStoryView,
   deleteStory,
   getStories,
   getStoryMeta,
+  getStoryViewers,
   getUserDisplay,
   markStorySeen,
   markStoryViewed,
+  subscribeStories,
 } from "../services/socialStoryStateService";
 import {
   mapStoryToFeedSignal,
   pushFeedSignal,
 } from "../../services/socialFeedBridgeService";
-import { addStoryReply } from "../../services/socialStoryReplyService";
+import {
+  addStoryReply,
+  getStoryReplyCount,
+  subscribeStoryReplies,
+} from "../../services/socialStoryReplyService";
 
 const STORY_DURATION_MS = 6000;
 const SWIPE_THRESHOLD = 60;
@@ -57,7 +62,7 @@ export default function SocialStoryViewerScreen() {
   const T = useAppTheme();
   const insets = useSafeAreaInsets();
 
-  const currentUserId = profile?.userId ?? "u1";
+  const currentUserId = getCurrentSocialUserId();
 
   const progress = useRef(new Animated.Value(0)).current;
   const progressAnimRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -70,7 +75,17 @@ export default function SocialStoryViewerScreen() {
   const initialStoryIndexParam: number = route.params?.initialStoryIndex ?? 0;
   const storyIdParam: string | undefined = route.params?.storyId;
 
-  const allStories = useMemo(() => getStories(), []);
+  const [storyStoreRev, setStoryStoreRev] = useState(0);
+  useEffect(() => {
+    const u1 = subscribeStories(() => setStoryStoreRev((n) => n + 1));
+    const u2 = subscribeStoryReplies(() => setStoryStoreRev((n) => n + 1));
+    return () => {
+      u1();
+      u2();
+    };
+  }, []);
+
+  const allStories = useMemo(() => getStories(), [storyStoreRev]);
   const groups = useMemo(
     () =>
       groupStoriesByUser(allStories as any, currentUserId).filter(
@@ -198,7 +213,12 @@ export default function SocialStoryViewerScreen() {
   useEffect(() => {
     if (!current?.id || !currentUserId) return;
     markStorySeen(current.id, currentUserId);
-  }, [storyIndex, currentUserId, current?.id]);
+    if (!isOwner) {
+      const viewerName =
+        profile?.username?.trim() || getUserDisplay(currentUserId).username;
+      addStoryView(current.id, currentUserId, viewerName);
+    }
+  }, [storyIndex, currentUserId, current?.id, isOwner, profile?.username]);
 
   function stopPlayback() {
     if (timerRef.current) {
@@ -408,6 +428,20 @@ export default function SocialStoryViewerScreen() {
   const mediaUri = media?.uri ?? null;
 
   const meta = getStoryMeta(story.id);
+  const storyViewersList = getStoryViewers(story.id);
+  const seenListForUi =
+    storyViewersList.length > 0
+      ? storyViewersList
+      : (meta.seenBy ?? []).map((uid) => ({
+          userId: uid,
+          username: getUserDisplay(uid).username,
+          seenAt: "",
+        }));
+  const uniqueSeenCount = Math.max(
+    meta.seenBy?.length ?? 0,
+    storyViewersList.length
+  );
+  const replyCount = getStoryReplyCount(story.id);
 
   return (
     <View style={styles.container} pointerEvents="box-none" {...panResponder.panHandlers}>
@@ -421,39 +455,24 @@ export default function SocialStoryViewerScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={{
-          position: "absolute",
-          top: 60,
-          right: 12,
-          zIndex: 999,
-          backgroundColor: "rgba(0,0,255,0.6)",
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          borderRadius: 8,
-        }}
+        style={[styles.headerIconBtn, { top: Math.max(insets.top, 6), right: 52 }]}
         onPress={() => navigation.navigate("SocialInbox")}
+        hitSlop={12}
       >
-        <Text style={{ color: "#fff", fontWeight: "700" }}>INBOX</Text>
+        <Ionicons name="mail-outline" size={22} color="#fff" />
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={{
-          position: "absolute",
-          top: 60,
-          left: 10,
-          zIndex: 999,
-          backgroundColor: "red",
-          paddingVertical: 6,
-          paddingHorizontal: 10,
-          borderRadius: 8,
-        }}
-        onPress={() => {
-          switchTestUser();
-          forceUpdate((x) => x + 1);
-        }}
-      >
-        <Text style={{ color: "#fff", fontWeight: "700" }}>USER SWITCH</Text>
-      </TouchableOpacity>
+      {__DEV__ ? (
+        <TouchableOpacity
+          style={[styles.devSwitchBtn, { top: Math.max(insets.top, 6) }]}
+          onPress={() => {
+            switchTestUser();
+            forceUpdate((x) => x + 1);
+          }}
+        >
+          <Text style={styles.devSwitchText}>Kullanıcı</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.headerContainer}>
         <View style={styles.headerContent}>
@@ -715,6 +734,11 @@ export default function SocialStoryViewerScreen() {
             },
           ]}
         >
+          {replyCount > 0 ? (
+            <Text style={styles.replyCountHint} numberOfLines={1}>
+              {replyCount} yanıt
+            </Text>
+          ) : null}
           <View style={styles.replyRow}>
             <View
               style={[
@@ -786,9 +810,7 @@ export default function SocialStoryViewerScreen() {
                 );
                 setReply("");
                 setIsTyping(false);
-                setTimeout(() => {
-                  console.log("MESSAGES:", getSocialMessages(currentUserId));
-                }, 500);
+                Keyboard.dismiss();
               }}
             >
               <LinearGradient
@@ -858,7 +880,7 @@ export default function SocialStoryViewerScreen() {
 
             <View style={styles.statsCountsRow}>
               <Text style={styles.statTitle}>
-                👀 {(meta.seenBy?.length ?? 0)} görüntüleme
+                👀 {uniqueSeenCount} görüntüleme
               </Text>
               <Text style={styles.statTitle}>
                 ❤️ {(meta.likedBy?.length ?? 0)} beğeni
@@ -866,17 +888,26 @@ export default function SocialStoryViewerScreen() {
               <Text style={styles.statTitle}>
                 🔥 {(meta.reactions?.length ?? 0)} reaksiyon
               </Text>
+              {isOwner ? (
+                <Text style={styles.statTitle}>💬 {replyCount} yanıt</Text>
+              ) : null}
             </View>
 
             {isOwner ? (
               <>
                 <Text style={styles.sectionTitle}>Görüntüleyenler</Text>
                 <FlatList
-                  data={meta.seenBy ?? []}
-                  keyExtractor={(i) => `seen-${i}`}
+                  data={seenListForUi}
+                  keyExtractor={(i, idx) => `seen-${i.userId}-${i.seenAt || idx}`}
                   style={styles.list}
                   renderItem={({ item }) => {
-                    const u = getUserDisplay(item);
+                    const u = getUserDisplay(item.userId);
+                    const seenLabel = item.seenAt
+                      ? new Date(item.seenAt).toLocaleTimeString("tr-TR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "";
                     return (
                       <View style={styles.userRow}>
                         {u.avatarUri ? (
@@ -888,10 +919,10 @@ export default function SocialStoryViewerScreen() {
                         )}
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text style={styles.userName} numberOfLines={1}>
-                            {u.username}
+                            {item.username || u.username}
                           </Text>
                           <Text style={styles.userMeta} numberOfLines={1}>
-                            {u.userId}
+                            {seenLabel || u.userId}
                           </Text>
                         </View>
                       </View>
@@ -958,6 +989,28 @@ const styles = StyleSheet.create({
     zIndex: 100,
     elevation: 100,
     padding: 8,
+  },
+
+  headerIconBtn: {
+    position: "absolute",
+    zIndex: 999,
+    elevation: 999,
+    padding: 8,
+  },
+  devSwitchBtn: {
+    position: "absolute",
+    left: 10,
+    zIndex: 999,
+    elevation: 999,
+    backgroundColor: "rgba(220,38,38,0.45)",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  devSwitchText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
 
   headerContainer: {
@@ -1084,6 +1137,16 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 12,
   },
+  replyCountHint: {
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 6,
+    marginLeft: 4,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   replyRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -1194,7 +1257,9 @@ const styles = StyleSheet.create({
 
   statsCountsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
+    gap: 8,
     paddingVertical: 8,
     paddingHorizontal: 4,
     marginBottom: 10,

@@ -36,8 +36,10 @@ import {
   getMutualConnections,
   getSuggestedUsers,
   isFollowing,
+  subscribeFollow,
   toggleFollow,
 } from "../services/socialFollowService";
+import { subscribeFeed } from "../services/socialFeedStateService";
 
 import { socialEventService, type SocialEvent } from "../services/socialEventService";
 
@@ -55,14 +57,25 @@ export default function SocialExploreScreen() {
   const navigation = useNavigation<Nav>();
   const [events, setEvents] = useState<SocialEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
+  const [listTick, setListTick] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setListTick((n) => n + 1);
+    const u1 = subscribeFollow(bump);
+    const u2 = subscribeFeed(bump);
+    return () => {
+      u1();
+      u2();
+    };
+  }, []);
 
   const trendingPosts = useMemo(
     () => getTrendingPosts(TRENDING_LIMIT),
-    []
+    [listTick]
   );
   const trendingVideos = useMemo(
     () => getTrendingVideos(VIDEOS_PREVIEW),
-    []
+    [listTick]
   );
   const suggestedUsers: SuggestedUser[] = useMemo(() => {
     return getSuggestedUsers(SUGGESTED_LIMIT).map((u) => ({
@@ -71,8 +84,8 @@ export default function SocialExploreScreen() {
       userAvatarUri: null,
       mutualCount: getMutualConnections(u.userId),
     }));
-  }, []);
-  const hashtags = useMemo(() => getHashtagsFromPosts(), []);
+  }, [listTick]);
+  const hashtags = useMemo(() => getHashtagsFromPosts(), [listTick]);
 
   useEffect(() => {
     let cancelled = false;

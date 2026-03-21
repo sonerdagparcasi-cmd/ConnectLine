@@ -16,7 +16,7 @@ const REPORTS: ReportEntry[] = [];
 
 export function reportUser(
   userId: string,
-  reason: SocialReportReason,
+  reason: SocialReportReason = "other",
   reporterUserId: string = "me"
 ): void {
   REPORTS.push({
@@ -29,9 +29,10 @@ export function reportUser(
   });
 }
 
+/** `reason` verilmezse `other` kaydedilir (FAZ 5 — hızlı bildirim). */
 export function reportPost(
   postId: string,
-  reason: SocialReportReason,
+  reason: SocialReportReason = "other",
   reporterUserId: string = "me"
 ): void {
   REPORTS.push({

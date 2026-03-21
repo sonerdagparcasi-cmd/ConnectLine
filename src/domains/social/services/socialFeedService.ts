@@ -68,30 +68,65 @@ function sortByTrend(posts: SocialPost[]): SocialPost[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* RANK FEED (FAZ 5 – following priority + activity + recency)        */
+/* RANK FEED (FAZ 5 ADIM 6)                                            */
+/* Sıra: 1) Kendi gönderilerin 2) Takip edilenler 3) Popüler / keşif   */
+/* Sinyaller: likeCount, commentCount (etkileşim), recency, likedByMe  */
 /* ------------------------------------------------------------------ */
 
+function feedRecencyScore(post: SocialPost): number {
+  const created = new Date(post.createdAt).getTime();
+  const now = Date.now();
+  const hours = (now - created) / (1000 * 60 * 60);
+  if (hours < 1) return 55;
+  if (hours < 6) return 32;
+  if (hours < 24) return 18;
+  if (hours < 72) return 9;
+  if (hours < 168) return 4;
+  return Math.max(0, 2 - Math.floor(hours / (24 * 14)));
+}
+
+/** Beğeni + yorum + küçük kişisel etkileşim (sen beğendiysen hafif boost) */
+function feedInteractionScore(post: SocialPost): number {
+  const likes = (post.likeCount ?? 0) * 3;
+  const comments = (post.commentCount ?? 0) * 5;
+  const youLiked = post.likedByMe ? 12 : 0;
+  return likes + comments + youLiked;
+}
+
+/**
+ * @param currentUserId — `getCurrentSocialUserId()` ile beslenir (mock u1)
+ */
 export function rankFeedPosts(
   posts: SocialPost[],
-  followingIds: string[]
+  followingIds: string[],
+  currentUserId: string = CURRENT_USER_ID
 ): SocialPost[] {
   const followingSet = new Set(followingIds);
 
-  function score(p: SocialPost): number {
-    const followBonus = followingSet.has(p.userId) ? 100 : 0;
-    const likeScore = (p.likeCount ?? 0) * 2;
-    const commentScore = (p.commentCount ?? 0) * 3;
-    const created = new Date(p.createdAt).getTime();
-    const now = Date.now();
-    const hours = (now - created) / (1000 * 60 * 60);
-    let recency = 0;
-    if (hours < 1) recency = 30;
-    else if (hours < 6) recency = 15;
-    else if (hours < 24) recency = 5;
-    return followBonus + likeScore + commentScore + recency;
+  /** 0 = kendi, 1 = takip, 2 = diğer (popüler keşif) */
+  function tier(p: SocialPost): number {
+    if (p.userId === currentUserId) return 0;
+    if (followingSet.has(p.userId)) return 1;
+    return 2;
   }
 
-  return [...posts].sort((a, b) => score(b) - score(a));
+  function withinTierRank(p: SocialPost): number {
+    return feedInteractionScore(p) + feedRecencyScore(p);
+  }
+
+  return [...posts].sort((a, b) => {
+    const ta = tier(a);
+    const tb = tier(b);
+    if (ta !== tb) return ta - tb;
+
+    const ra = withinTierRank(a);
+    const rb = withinTierRank(b);
+    if (rb !== ra) return rb - ra;
+
+    return (
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  });
 }
 
 /* ------------------------------------------------------------------ */

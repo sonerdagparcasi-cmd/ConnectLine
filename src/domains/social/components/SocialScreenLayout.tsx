@@ -51,7 +51,7 @@ export default function SocialScreenLayout({
           {children}
         </ScrollView>
       ) : (
-        <View style={styles.content}>{children}</View>
+        <View style={[styles.content, styles.contentFill]}>{children}</View>
       )}
     </SafeAreaView>
   );
@@ -71,5 +71,11 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 40,
+  },
+
+  /** scroll={false} ekranlarda FlatList vb. için dikey alan */
+  contentFill: {
+    flex: 1,
+    minHeight: 0,
   },
 });

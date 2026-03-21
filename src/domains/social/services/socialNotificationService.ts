@@ -90,6 +90,111 @@ export function addNotifications(list: SocialNotification[]) {
 }
 
 /* ------------------------------------------------------------------ */
+/* FAZ 5 — TETİKLEYİCİLER (like / comment / follow)                    */
+/* Zorunlu anlam alanları: type, actorUserId, text, createdAt (+ id, read, hedef) */
+/* ------------------------------------------------------------------ */
+
+function nextNotificationId(prefix: string) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Beğeni — gönderi sahibine (kendi gönderini beğenmez) */
+export function notifyPostLiked(input: {
+  actorUserId: string;
+  actorUsername: string;
+  actorAvatarUri?: string | null;
+  postOwnerUserId: string;
+  postId: string;
+}) {
+  if (input.actorUserId === input.postOwnerUserId) return;
+
+  addNotification({
+    id: nextNotificationId("like"),
+    type: "like",
+    actorUserId: input.actorUserId,
+    actorUsername: input.actorUsername,
+    actorAvatarUri: input.actorAvatarUri ?? null,
+    targetUserId: input.postOwnerUserId,
+    postId: input.postId,
+    text: "gönderini beğendi",
+    createdAt: new Date().toISOString(),
+    read: false,
+  });
+}
+
+/** Yorum — gönderi sahibine (kendi gönderine yorumda bildirim yok) */
+export function notifyPostCommented(input: {
+  actorUserId: string;
+  actorUsername: string;
+  actorAvatarUri?: string | null;
+  postOwnerUserId: string;
+  postId: string;
+  commentText: string;
+}) {
+  if (input.actorUserId === input.postOwnerUserId) return;
+
+  const snippet = input.commentText.trim().slice(0, 72);
+  const ell = input.commentText.trim().length > 72 ? "…" : "";
+
+  addNotification({
+    id: nextNotificationId("comment"),
+    type: "comment",
+    actorUserId: input.actorUserId,
+    actorUsername: input.actorUsername,
+    actorAvatarUri: input.actorAvatarUri ?? null,
+    targetUserId: input.postOwnerUserId,
+    postId: input.postId,
+    text: snippet ? `yorum yaptı: "${snippet}${ell}"` : "yorum yaptı",
+    createdAt: new Date().toISOString(),
+    read: false,
+  });
+}
+
+/** Doğrudan takip (followUser) */
+export function notifyFollowDirect(input: {
+  actorUserId: string;
+  actorUsername: string;
+  actorAvatarUri?: string | null;
+  targetUserId: string;
+}) {
+  if (input.actorUserId === input.targetUserId) return;
+
+  addNotification({
+    id: nextNotificationId("follow"),
+    type: "follow",
+    actorUserId: input.actorUserId,
+    actorUsername: input.actorUsername,
+    actorAvatarUri: input.actorAvatarUri ?? null,
+    targetUserId: input.targetUserId,
+    text: "seni takip etmeye başladı",
+    createdAt: new Date().toISOString(),
+    read: false,
+  });
+}
+
+/** Takip isteği (sendFollowRequest) */
+export function notifyFollowRequestReceived(input: {
+  actorUserId: string;
+  actorUsername: string;
+  actorAvatarUri?: string | null;
+  targetUserId: string;
+}) {
+  if (input.actorUserId === input.targetUserId) return;
+
+  addNotification({
+    id: nextNotificationId("freq"),
+    type: "follow_request",
+    actorUserId: input.actorUserId,
+    actorUsername: input.actorUsername,
+    actorAvatarUri: input.actorAvatarUri ?? null,
+    targetUserId: input.targetUserId,
+    text: "sana takip isteği gönderdi",
+    createdAt: new Date().toISOString(),
+    read: false,
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* MARK READ                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -181,6 +286,11 @@ export function applySocialNotificationNavigation(
 ): boolean {
   if (notification.type === "follow_request") {
     navigate("SocialFollowRequests");
+    return true;
+  }
+
+  if (notification.type === "follow") {
+    navigate("SocialProfileContainer", { userId: notification.actorUserId });
     return true;
   }
 

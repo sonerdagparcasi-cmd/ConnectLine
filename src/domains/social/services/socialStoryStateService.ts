@@ -14,5 +14,6 @@ export {
   isStoryViewed,
   markStorySeen,
   markStoryViewed,
+  subscribeStories,
   toggleLike,
 } from "../story/services/socialStoryStateService";

@@ -7,7 +7,7 @@
 // - event feed support (non-breaking)
 
 import { Ionicons } from "@expo/vector-icons";
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
@@ -66,6 +66,23 @@ function SocialPostCard({
   }
 
   const media = post.media ?? [];
+
+  const displaySlots = useMemo(() => {
+    if (media.length <= 1) {
+      return media.map((m, originalIndex) => ({ m, originalIndex }));
+    }
+    const ci = post.coverIndex;
+    const coverPos = ci != null && ci >= 0 && ci < media.length ? ci : 0;
+    if (coverPos === 0) {
+      return media.map((m, originalIndex) => ({ m, originalIndex }));
+    }
+    return [
+      { m: media[coverPos], originalIndex: coverPos },
+      ...media
+        .map((m, originalIndex) => ({ m, originalIndex }))
+        .filter((x) => x.originalIndex !== coverPos),
+    ];
+  }, [media, post.coverIndex]);
 
   const lastTap = useRef<number>(0);
 
@@ -202,13 +219,13 @@ function SocialPostCard({
     if (media.length === 2) {
       return (
         <View style={styles.row}>
-          {media.map((m, i) => (
+          {displaySlots.map((slot) => (
             <Pressable
-              key={m.id ?? `m_${i}`}
+              key={slot.m.id ?? `m_${slot.originalIndex}`}
               style={styles.half}
-              onPress={() => handleDoubleTap(i)}
+              onPress={() => handleDoubleTap(slot.originalIndex)}
             >
-              <Image source={{ uri: m.uri }} style={styles.mediaImg} />
+              <Image source={{ uri: slot.m.uri }} style={styles.mediaImg} />
             </Pressable>
           ))}
         </View>
@@ -216,20 +233,21 @@ function SocialPostCard({
     }
 
     if (media.length === 3) {
+      const [first, ...rest] = displaySlots;
       return (
         <>
-          <Pressable onPress={() => handleDoubleTap(0)}>
-            <Image source={{ uri: media[0].uri }} style={styles.bigTop} />
+          <Pressable onPress={() => handleDoubleTap(first.originalIndex)}>
+            <Image source={{ uri: first.m.uri }} style={styles.bigTop} />
           </Pressable>
 
           <View style={styles.row}>
-            {media.slice(1).map((m, i) => (
+            {rest.map((slot) => (
               <Pressable
-                key={m.id ?? `m_${i}`}
+                key={slot.m.id ?? `m_${slot.originalIndex}`}
                 style={styles.half}
-                onPress={() => handleDoubleTap(i + 1)}
+                onPress={() => handleDoubleTap(slot.originalIndex)}
               >
-                <Image source={{ uri: m.uri }} style={styles.mediaImg} />
+                <Image source={{ uri: slot.m.uri }} style={styles.mediaImg} />
               </Pressable>
             ))}
           </View>
@@ -237,20 +255,21 @@ function SocialPostCard({
       );
     }
 
+    const [hero, ...rowRest] = displaySlots;
     return (
       <>
-        <Pressable onPress={() => handleDoubleTap(0)}>
-          <Image source={{ uri: media[0].uri }} style={styles.bigTop} />
+        <Pressable onPress={() => handleDoubleTap(hero.originalIndex)}>
+          <Image source={{ uri: hero.m.uri }} style={styles.bigTop} />
         </Pressable>
 
         <View style={styles.row}>
-          {media.slice(1, 4).map((m, i) => (
+          {rowRest.slice(0, 3).map((slot) => (
             <Pressable
-              key={m.id ?? `m_${i}`}
+              key={slot.m.id ?? `m_${slot.originalIndex}`}
               style={styles.third}
-              onPress={() => handleDoubleTap(i + 1)}
+              onPress={() => handleDoubleTap(slot.originalIndex)}
             >
-              <Image source={{ uri: m.uri }} style={styles.mediaImg} />
+              <Image source={{ uri: slot.m.uri }} style={styles.mediaImg} />
             </Pressable>
           ))}
         </View>
@@ -360,6 +379,8 @@ function SocialPostCard({
         likeCount={post.likeCount}
         commentCount={post.commentCount}
         saved={saved}
+        showLikeCount={post.settings?.likesVisible !== false}
+        commentsEnabled={post.settings?.comments !== false}
         onToggleLike={handleLike}
         onPressComments={handleComment}
         onPressShare={handleShare}

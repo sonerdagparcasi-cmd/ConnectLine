@@ -106,7 +106,7 @@ const NotificationRow = React.memo(function NotificationRow({
 
       <View style={styles.textWrap}>
         <Text style={[styles.username, { color: T.textColor }]} numberOfLines={1}>
-          {item.actorUsername}
+          {item.actorUsername || item.actorUserId}
         </Text>
         <Text style={[styles.text, { color: T.mutedText }]} numberOfLines={2}>
           {item.text}
@@ -147,9 +147,12 @@ export default function SocialNotificationsScreen() {
       markNotificationRead(n.id);
 
       if (
-        applySocialNotificationNavigation(n, (screen, params) =>
-          navigation.navigate(screen as keyof SocialStackParamList, params as never)
-        )
+        applySocialNotificationNavigation(n, (screen, params) => {
+          (navigation as { navigate: (s: string, p?: object) => void }).navigate(
+            screen,
+            params
+          );
+        })
       ) {
         return;
       }

@@ -12,10 +12,13 @@ import {
   updateProfile as storeUpdateProfile,
 } from "../state/socialProfileStore";
 import {
-  getPostsByUser,
+  getProfilePostsVisibleToCurrentUser,
   subscribeFeed,
 } from "../services/socialFeedStateService";
-import { getFollowingCount, subscribeFollow } from "../services/socialFollowService";
+import {
+  getFollowingCount,
+  subscribeFollow,
+} from "../services/socialFollowService";
 import { socialEventService } from "../services/socialEventService";
 
 /** TEST ONLY – fake user switch */
@@ -124,15 +127,19 @@ export function useSocialProfile(profileUserId?: string) {
   /* ------------------------------------------------------------------ */
 
   const [postCount, setPostCount] = useState(() =>
-    getPostsByUser(targetUserId).length
+    getProfilePostsVisibleToCurrentUser(targetUserId).length
   );
 
   useEffect(() => {
-    setPostCount(getPostsByUser(targetUserId).length);
-    const unsub = subscribeFeed(() =>
-      setPostCount(getPostsByUser(targetUserId).length)
-    );
-    return unsub;
+    const sync = () =>
+      setPostCount(getProfilePostsVisibleToCurrentUser(targetUserId).length);
+    sync();
+    const unsubFeed = subscribeFeed(sync);
+    const unsubFollow = subscribeFollow(sync);
+    return () => {
+      unsubFeed();
+      unsubFollow();
+    };
   }, [targetUserId]);
 
   /* ------------------------------------------------------------------ */

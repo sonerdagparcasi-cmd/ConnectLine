@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
+import { SOCIAL_LIKE_ACTIVE_COLOR } from "../constants/socialInteraction";
 
 type Props = {
   liked: boolean;
@@ -12,6 +13,11 @@ type Props = {
   commentCount: number;
 
   saved?: boolean;
+
+  /** false: beğeni sayısı gösterilmez (ikon kalır) */
+  showLikeCount?: boolean;
+  /** false: yorum satırı pasif */
+  commentsEnabled?: boolean;
 
   onToggleLike: () => void;
   onPressComments: () => void;
@@ -24,6 +30,8 @@ export default function SocialReactionBar({
   likeCount,
   commentCount,
   saved,
+  showLikeCount = true,
+  commentsEnabled = true,
   onToggleLike,
   onPressComments,
   onPressShare,
@@ -31,7 +39,7 @@ export default function SocialReactionBar({
 }: Props) {
   const T = useAppTheme();
 
-  const likeColor = liked ? T.accent : T.textColor;
+  const likeColor = liked ? SOCIAL_LIKE_ACTIVE_COLOR : T.textColor;
 
   return (
     <View style={styles.row}>
@@ -48,33 +56,35 @@ export default function SocialReactionBar({
           color={likeColor}
         />
 
-        <Text
-          style={[
-            styles.txt,
-            { color: likeColor },
-          ]}
-        >
-          {likeCount}
-        </Text>
+        {showLikeCount ? (
+          <Text
+            style={[
+              styles.txt,
+              { color: likeColor },
+            ]}
+          >
+            {likeCount}
+          </Text>
+        ) : null}
       </TouchableOpacity>
 
       {/* COMMENT */}
 
-      <TouchableOpacity
-        onPress={onPressComments}
-        activeOpacity={0.85}
-        style={styles.btn}
-      >
-        <Ionicons
-          name="chatbubble-outline"
-          size={19}
-          color={T.textColor}
-        />
+      {commentsEnabled ? (
+        <TouchableOpacity
+          onPress={onPressComments}
+          activeOpacity={0.85}
+          style={styles.btn}
+        >
+          <Ionicons
+            name="chatbubble-outline"
+            size={19}
+            color={T.textColor}
+          />
 
-        <Text style={[styles.txt, { color: T.textColor }]}>
-          {commentCount}
-        </Text>
-      </TouchableOpacity>
+          <Text style={[styles.txt, { color: T.textColor }]}>{commentCount}</Text>
+        </TouchableOpacity>
+      ) : null}
 
       {/* SHARE */}
 

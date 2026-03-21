@@ -3,12 +3,21 @@
 
 import { socialProfileStore } from "../state/socialProfileStore";
 import { MOCK_POSTS } from "./socialMockData";
+import {
+  notifyFollowDirect,
+  notifyFollowRequestReceived,
+} from "./socialNotificationService";
 
 /* ------------------------------------------------------------------ */
 /* CURRENT USER                                                       */
 /* ------------------------------------------------------------------ */
 
 const CURRENT_USER_ID = "u1";
+
+/** Aktif sosyal kullanıcı (mock); gönderi sahipliği / düzenleme kontrolü */
+export function getCurrentSocialUserId(): string {
+  return CURRENT_USER_ID;
+}
 
 /* ------------------------------------------------------------------ */
 /* FOLLOW GRAPH                                                       */
@@ -57,12 +66,21 @@ function getAllUsers() {
   return Object.values(map);
 }
 
+/** Bildirim / feed için görünen kullanıcı adı (mock kullanıcı listesi) */
+export function getSocialDisplayName(userId: string): string {
+  const id = resolveSocialUserId(userId);
+  const u = getAllUsers().find((x) => x.userId === id);
+  return u?.username ?? id;
+}
+
 /* ------------------------------------------------------------------ */
 /* FOLLOW ACTIONS                                                     */
 /* ------------------------------------------------------------------ */
 
 export function followUser(userId: string) {
   if (userId === CURRENT_USER_ID) return;
+
+  const wasFollowing = !!FOLLOWING[userId];
 
   FOLLOWING = {
     ...FOLLOWING,
@@ -71,6 +89,14 @@ export function followUser(userId: string) {
 
   socialProfileStore.setFollowingCount(getFollowingCount());
   emit();
+
+  if (!wasFollowing) {
+    notifyFollowDirect({
+      actorUserId: CURRENT_USER_ID,
+      actorUsername: getSocialDisplayName(CURRENT_USER_ID),
+      targetUserId: userId,
+    });
+  }
 }
 
 export function unfollowUser(userId: string) {
@@ -102,6 +128,12 @@ export function sendFollowRequest(fromUserId: string, toUserId: string) {
     fromUserId: fromId,
     toUserId: toId,
     createdAt: new Date().toISOString(),
+  });
+
+  notifyFollowRequestReceived({
+    actorUserId: fromId,
+    actorUsername: getSocialDisplayName(fromId),
+    targetUserId: toId,
   });
 
   emit();

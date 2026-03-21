@@ -1,6 +1,6 @@
 // src/domains/social/story/hooks/useSocialStories.ts
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useSocialProfile } from "../../hooks/useSocialProfile";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
@@ -10,12 +10,17 @@ import {
   getStories,
   markStorySeen,
   markStoryViewed,
+  subscribeStories,
   toggleLike,
 } from "../services/socialStoryStateService";
 
 export function useSocialStories() {
   const { profile } = useSocialProfile();
-  const stories = useMemo(() => getStories(), []);
+  const [rev, setRev] = useState(0);
+
+  useEffect(() => subscribeStories(() => setRev((n) => n + 1)), []);
+
+  const stories = useMemo(() => getStories(), [rev]);
   const groups = useMemo(
     () => groupStoriesByUser(stories, profile.userId),
     [stories, profile.userId]
@@ -31,6 +36,7 @@ export function useSocialStories() {
     markStoryViewed,
     markStorySeen,
     toggleLike,
+    subscribeStories,
   };
 }
 

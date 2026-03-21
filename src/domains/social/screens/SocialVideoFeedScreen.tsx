@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ResizeMode, Video } from "expo-av";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -19,9 +19,11 @@ import { useAppTheme } from "../../../shared/theme/appTheme";
 import { t } from "../../../shared/i18n/t";
 
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
+import { SOCIAL_LIKE_ACTIVE_COLOR } from "../constants/socialInteraction";
 
 import {
   getTrendingVideos,
+  subscribeFeed,
   toggleLike,
 } from "../services/socialFeedStateService";
 
@@ -43,7 +45,15 @@ export default function SocialVideoFeedScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
 
-  const videos = useMemo(() => getTrendingVideos(50), []);
+  const [videos, setVideos] = useState<SocialPost[]>(() =>
+    getTrendingVideos(50)
+  );
+
+  useEffect(() => {
+    const sync = () => setVideos(getTrendingVideos(50));
+    sync();
+    return subscribeFeed(sync);
+  }, []);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
@@ -125,7 +135,7 @@ export default function SocialVideoFeedScreen() {
                 <Ionicons
                   name={item.likedByMe ? "heart" : "heart-outline"}
                   size={24}
-                  color={item.likedByMe ? T.accent : T.cardBg}
+                  color={item.likedByMe ? SOCIAL_LIKE_ACTIVE_COLOR : T.cardBg}
                 />
               </View>
               <Text style={styles.actionLabel}>{String(item.likeCount ?? 0)}</Text>

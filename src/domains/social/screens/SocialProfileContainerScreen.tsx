@@ -31,7 +31,7 @@ import {
   type SocialEvent,
 } from "../services/socialEventService";
 import {
-  getPostsByUser,
+  getProfilePostsVisibleToCurrentUser,
   getSavedPosts,
   subscribeFeed,
 } from "../services/socialFeedStateService";
@@ -45,7 +45,6 @@ import {
   subscribeFollow,
   toggleFollow,
 } from "../services/socialFollowService";
-import { addNotification } from "../services/socialNotificationService";
 import type { SocialPost } from "../types/social.types";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
@@ -65,35 +64,32 @@ export default function SocialProfileContainerScreen() {
   const [blocked, setBlocked] = useState(() => isBlocked(profile.userId));
 
   const [feedPosts, setFeedPosts] = useState<SocialPost[]>(() =>
-    getPostsByUser(profile.userId)
+    getProfilePostsVisibleToCurrentUser(profile.userId)
   );
   const [savedList, setSavedList] = useState<SocialPost[]>(() => getSavedPosts());
   const [userEvents, setUserEvents] = useState<SocialEvent[]>([]);
 
   useEffect(() => {
-    setFollowing(isFollowing(profile.userId));
-    setBlocked(isBlocked(profile.userId));
-  }, [profile.userId]);
-
-  useEffect(() => {
-    const unsub = subscribeFollow(() => {
+    const sync = () => {
       setFollowing(isFollowing(profile.userId));
       setBlocked(isBlocked(profile.userId));
-    });
-    return unsub;
-  }, [profile.userId]);
-
-  useEffect(() => {
-    setFeedPosts(getPostsByUser(profile.userId));
-    setSavedList(getSavedPosts());
-    const unsub = subscribeFeed(() => {
-      setFeedPosts(getPostsByUser(profile.userId));
+      setFeedPosts(getProfilePostsVisibleToCurrentUser(profile.userId));
       setSavedList(getSavedPosts());
-    });
-    return unsub;
+    };
+    sync();
+    const unsubFeed = subscribeFeed(sync);
+    const unsubFollow = subscribeFollow(sync);
+    return () => {
+      unsubFeed();
+      unsubFollow();
+    };
   }, [profile.userId]);
 
   useEffect(() => {
+    if (!isOwner && blocked) {
+      setUserEvents([]);
+      return;
+    }
     let cancelled = false;
     socialEventService.getEventsByUser(profile.userId).then((events) => {
       if (!cancelled) setUserEvents(events);
@@ -101,7 +97,7 @@ export default function SocialProfileContainerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [profile.userId]);
+  }, [profile.userId, isOwner, blocked]);
 
   const gridPosts = feedPosts;
   const videoPosts = useMemo(
@@ -109,7 +105,8 @@ export default function SocialProfileContainerScreen() {
     [feedPosts]
   );
   const savedPosts = savedList;
-  const mutualConnections = isOwner ? 0 : getMutualConnections(profile.userId);
+  const mutualConnections =
+    isOwner ? 0 : blocked ? 0 : getMutualConnections(profile.userId);
   const primaryText = T.isDark ? "#FFFFFF" : "#000000";
   const secondaryText = T.isDark
     ? "rgba(255,255,255,0.75)"
@@ -141,16 +138,6 @@ export default function SocialProfileContainerScreen() {
     (id: string) => {
       if (id === "follow") {
         sendFollowRequest("me", profile.userId);
-        addNotification({
-          id: `follow_req_${Date.now()}`,
-          type: "follow_request",
-          actorUserId: "me",
-          actorUsername: "sen",
-          targetUserId: profile.userId,
-          text: "sana takip isteği gönderdi",
-          createdAt: new Date().toISOString(),
-          read: false,
-        });
       } else if (id === "message") Alert.alert("", "Mesaj (UI-only)");
       else if (id === "shareProfile") Alert.alert("", "Profili paylaş (UI-only)");
       else if (id === "blockUser") Alert.alert("", "Engelle (UI-only)");
@@ -262,16 +249,6 @@ export default function SocialProfileContainerScreen() {
                       style={styles.textAction}
                       onPress={() => {
                         sendFollowRequest("me", profile.userId);
-                        addNotification({
-                          id: `follow_req_${Date.now()}`,
-                          type: "follow_request",
-                          actorUserId: "me",
-                          actorUsername: "sen",
-                          targetUserId: profile.userId,
-                          text: "sana takip isteği gönderdi",
-                          createdAt: new Date().toISOString(),
-                          read: false,
-                        });
                       }}
                     >
                       <Text style={[styles.baseText, { color: primaryText }]}>Takip Et</Text>
@@ -311,6 +288,14 @@ export default function SocialProfileContainerScreen() {
           </View>
         </View>
       </LinearGradient>
+
+      {!isOwner && blocked ? (
+        <View style={styles.blockedNoticeWrap}>
+          <Text style={[styles.blockedNoticeText, { color: mutedTextColor }]}>
+            Bu kullanıcıyı engellediniz. Gönderiler ve etkinlikler gizlendi.
+          </Text>
+        </View>
+      ) : null}
 
       <LinearGradient colors={headerGradient} style={styles.tabContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
@@ -542,6 +527,15 @@ function TabBtn({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   headerWrap: { paddingBottom: -6 },
+  blockedNoticeWrap: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  blockedNoticeText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: "500",
+  },
   headerContainer: {
     paddingBottom: 8,
   },

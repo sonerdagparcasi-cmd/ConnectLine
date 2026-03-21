@@ -26,6 +26,7 @@ export const MOCK_POSTS: SocialPost[] = [
     commentsPreview: [
       {
         id: "c1",
+        postId: "p1",
         userId: "u2",
         username: "ayse",
         text: "Çok iyi görünüyor!",

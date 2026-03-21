@@ -1,6 +1,6 @@
 // src/domains/social/types/social.types.ts
 
-export type SocialVisibility = "public" | "hidden";
+export type SocialVisibility = "public" | "hidden" | "followers" | "private";
 
 export type SocialMediaType = "image" | "video";
 
@@ -30,8 +30,10 @@ export type SocialMediaItem = {
 /* COMMENTS                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/** Gönderi yorumu (FAZ 5 — tek kaynak: feed state + socialCommentService) */
 export type SocialComment = {
   id: string;
+  postId: string;
   userId: string;
   username: string;
   text: string;
@@ -44,6 +46,14 @@ export type SocialComment = {
 /* POSTS                                                                      */
 /* -------------------------------------------------------------------------- */
 
+/** Paylaşım oluştur ekranından gelen görünürlük / etkileşim tercihleri */
+export type SocialPostShareSettings = {
+  comments: boolean;
+  likesVisible: boolean;
+  /** İsteğe bağlı eş anlamlı (comments ile senkron tutulur) */
+  commentsEnabled?: boolean;
+};
+
 export type SocialPost = {
   id: string;
 
@@ -52,6 +62,8 @@ export type SocialPost = {
   userAvatarUri?: string | null;
 
   media: SocialMediaItem[]; // 🔒 her zaman array
+  /** Kapak görseli bu indeksteki medyadır (yoksa 0) */
+  coverIndex?: number;
   caption: string;
 
   music?: SocialMusicTrack | null;
@@ -59,11 +71,28 @@ export type SocialPost = {
   visibility: SocialVisibility;
   createdAt: string;
 
+  /** Toplam beğeni sayısı (servis: `toggleLike` ile güncellenir) */
   likeCount: number;
+  /** Mevcut kullanıcı bu gönderiyi beğendi mi */
   likedByMe: boolean;
 
   commentCount: number;
   commentsPreview?: SocialComment[];
+
+  /** Yorum / beğeni sayısı görünürlüğü (yoksa varsayılan: açık) */
+  settings?: SocialPostShareSettings;
+
+  /** Video küçük resim kapağı: medya id → saniye (şimdilik 0 = başlangıç) */
+  videoCovers?: Record<string, number>;
+
+  /** true ise feed / profil listelerinde gizlenir; mağazada kalır */
+  archived?: boolean;
+
+  /** Açıklamadan çıkarılmış @mention kullanıcı adları (önbellek) */
+  mentions?: string[];
+
+  /** Açıklamadan çıkarılmış #etiketler (önbellek) */
+  hashtags?: string[];
 
   /* ---------------------------------------------------------------------- */
   /* EVENT FEED CARD SUPPORT (NEW)                                          */

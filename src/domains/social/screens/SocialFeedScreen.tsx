@@ -34,6 +34,7 @@ import {
 
 import {
   blockUser,
+  getCurrentSocialUserId,
   isBlocked,
   isMuted,
   subscribeFollow,
@@ -69,6 +70,7 @@ export default function SocialFeedScreen() {
   const navigation = useNavigation<Nav>();
 
   const [posts, setPosts] = useState<SocialPost[]>(() => getFeedPosts());
+  const [storiesTick, setStoriesTick] = useState(0);
   const [events, setEvents] = useState<SocialEvent[]>([]);
   const [hiddenMap, setHiddenMap] = useState<Record<string, boolean>>({});
   const [loadingMore, setLoadingMore] = useState(false);
@@ -99,6 +101,7 @@ export default function SocialFeedScreen() {
     });
     const unsubFollow = subscribeFollow(() => {
       setPosts(getFeedPosts());
+      setStoriesTick((n) => n + 1);
     });
 
     return () => {
@@ -140,25 +143,11 @@ export default function SocialFeedScreen() {
   /* ACTIONS                                                            */
   /* ------------------------------------------------------------------ */
 
-  const handleToggleLike = useCallback(
-    (postId: string) => {
-      const post = posts.find((p) => p.id === postId);
-      if (!post) return;
-      toggleLike(postId);
-      addNotification({
-        id: `like_${Date.now()}`,
-        type: "like",
-        actorUserId: "me",
-        actorUsername: "sen",
-        targetUserId: post.userId,
-        postId: post.id,
-        text: "gönderini beğendi",
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
-    },
-    [posts]
-  );
+  const handleToggleLike = useCallback((postId: string) => {
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
+    toggleLike(postId);
+  }, [posts]);
 
   const toggleHidden = useCallback((postId: string) => {
     setHiddenMap((prev) => ({ ...prev, [postId]: !prev[postId] }));
@@ -235,7 +224,7 @@ export default function SocialFeedScreen() {
   const openPostMenu = useCallback(
     (post: SocialPost) => {
       const isHidden = !!hiddenMap[post.id];
-      const isMyPost = post.userId === "u1";
+      const isMyPost = post.userId === getCurrentSocialUserId();
 
       const reportPostReason = () => {
         Alert.alert(
@@ -281,6 +270,10 @@ export default function SocialFeedScreen() {
       if (!isMyPost) {
         buttons.push(
           { text: t("social.report.post"), onPress: reportPostReason },
+          {
+            text: t("social.report.quick"),
+            onPress: () => reportPost(post.id),
+          },
           { text: t("social.report.user"), onPress: reportUserReason },
           { text: t("social.block"), onPress: () => blockUser(post.userId) }
         );
@@ -300,7 +293,7 @@ export default function SocialFeedScreen() {
       getStories().filter(
         (s) => !isMuted(s.userId) && !isBlocked(s.userId)
       ),
-    []
+    [storiesTick]
   );
 
   const listHeader = useMemo(

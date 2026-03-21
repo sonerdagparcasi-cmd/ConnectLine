@@ -452,6 +452,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "social.report.reason.other": "Diğer",
     "social.report.user": "Kullanıcıyı bildir",
     "social.report.post": "Gönderiyi bildir",
+    "social.report.quick": "Hızlı bildir",
 
     "social.story": "Hikaye",
     "social.reply": "Yanıtla",
@@ -950,6 +951,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "social.report.reason.other": "Other",
     "social.report.user": "Report user",
     "social.report.post": "Report post",
+    "social.report.quick": "Quick report",
 
     "social.story": "Story",
     "social.reply": "Reply",

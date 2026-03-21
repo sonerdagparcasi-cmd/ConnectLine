@@ -38,6 +38,19 @@ export type SocialStoryReply = {
 
 let STORY_REPLIES: Record<string, SocialStoryReply[]> = {};
 
+let replyListeners: Array<() => void> = [];
+
+function emitReplyChange() {
+  replyListeners.forEach((l) => l());
+}
+
+export function subscribeStoryReplies(listener: () => void) {
+  if (!replyListeners.includes(listener)) replyListeners.push(listener);
+  return () => {
+    replyListeners = replyListeners.filter((l) => l !== listener);
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* HELPERS                                                            */
 /* ------------------------------------------------------------------ */
@@ -73,6 +86,7 @@ export function addStoryReply(
     [storyId]: [reply, ...existing],
   };
 
+  emitReplyChange();
   return reply;
 }
 
@@ -103,6 +117,7 @@ export function addStoryReaction(
     [storyId]: [reply, ...existing],
   };
 
+  emitReplyChange();
   return reply;
 }
 
@@ -158,4 +173,13 @@ export function getStoryReplyCount(storyId: string) {
 
 export function resetStoryReplies() {
   STORY_REPLIES = {};
+  emitReplyChange();
+}
+
+/** Story silindiğinde yanıtları temizle (tek kaynak tutarlılığı) */
+export function clearRepliesForStory(storyId: string) {
+  if (!STORY_REPLIES[storyId]) return;
+  const { [storyId]: _removed, ...rest } = STORY_REPLIES;
+  STORY_REPLIES = rest;
+  emitReplyChange();
 }

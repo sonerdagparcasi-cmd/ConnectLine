@@ -8,8 +8,20 @@
 // - updatePost safety
 // - EVENT FEED SUPPORT
 
-import type { SocialComment, SocialPost } from "../types/social.types";
-import { getFollowingIds, isBlocked, isMuted } from "./socialFollowService";
+import type { SocialComment, SocialPost, SocialPostShareSettings } from "../types/social.types";
+import {
+  getCurrentSocialUserId,
+  getSocialDisplayName,
+  getFollowingIds,
+  isBlocked,
+  isMuted,
+} from "./socialFollowService";
+
+/** Engellenen / sessize alınan yazarların gönderileri (feed, keşfet, kayıtlı vb.) */
+function filterBlockedAndMutedAuthors(posts: SocialPost[]): SocialPost[] {
+  return posts.filter((p) => !isBlocked(p.userId) && !isMuted(p.userId));
+}
+import { notifyPostCommented, notifyPostLiked } from "./socialNotificationService";
 import { socialEventService } from "./socialEventService";
 import { getFeedPosts as getBaseFeedPosts, rankFeedPosts } from "./socialFeedService";
 
@@ -40,7 +52,7 @@ let LOADING = false;
 /* SAVED POSTS                                                        */
 /* ------------------------------------------------------------------ */
 
-let SAVED: Record<string, boolean> = {};
+const SAVED_POST_IDS = new Set<string>();
 
 /* ------------------------------------------------------------------ */
 /* COMMENTS (per post)                                                 */
@@ -102,10 +114,18 @@ async function initStore() {
 
   POST_MAP = {};
   POST_ORDER = [];
+  COMMENTS = {};
 
   merged.forEach((p) => {
     POST_MAP[p.id] = p;
     POST_ORDER.push(p.id);
+    const preview = p.commentsPreview;
+    if (preview?.length) {
+      COMMENTS[p.id] = preview.map((c) => ({
+        ...c,
+        postId: c.postId ?? p.id,
+      }));
+    }
   });
 
   TIMELINE_CACHE = null;
@@ -126,16 +146,35 @@ export function getPostById(postId: string): SocialPost | undefined {
   return POST_MAP[postId];
 }
 
+/** Liste görünümleri: arşivlenmiş gönderileri dışla */
+function filterPublished(posts: SocialPost[]): SocialPost[] {
+  return posts.filter((p) => !p.archived);
+}
+
+function mergeSettings(
+  cur: SocialPostShareSettings | undefined,
+  patch: Partial<SocialPostShareSettings>
+): SocialPostShareSettings {
+  const merged = { comments: true, likesVisible: true, ...cur, ...patch };
+  const commentsVal = merged.commentsEnabled ?? merged.comments;
+  const likesVal = merged.likesVisible;
+  return {
+    comments: commentsVal !== false,
+    likesVisible: likesVal !== false,
+    commentsEnabled: commentsVal !== false,
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* TIMELINE FEED (ranked + filtered by blocked/muted)                  */
 /* ------------------------------------------------------------------ */
 
 export function getFeedPosts(): SocialPost[] {
-  const posts = getAllPosts();
+  const posts = filterPublished(getAllPosts());
   const filtered = posts.filter(
     (p) => !isBlocked(p.userId) && !isMuted(p.userId)
   );
-  return rankFeedPosts(filtered, getFollowingIds());
+  return rankFeedPosts(filtered, getFollowingIds(), getCurrentSocialUserId());
 }
 
 /* ------------------------------------------------------------------ */
@@ -172,9 +211,19 @@ export function recordCommentAdded(postId: string): void {
 /* ------------------------------------------------------------------ */
 
 export function getPostsByUser(userId: string): SocialPost[] {
-  return POST_ORDER
-    .map((id) => POST_MAP[id])
-    .filter((p) => p.userId === userId);
+  return filterPublished(
+    POST_ORDER.map((id) => POST_MAP[id]).filter((p) => p.userId === userId)
+  );
+}
+
+/**
+ * Mevcut kullanıcı başka birini engellediyse o profilde içerik gösterilmez.
+ * Kendi profili her zaman tam listelenir.
+ */
+export function getProfilePostsVisibleToCurrentUser(profileUserId: string): SocialPost[] {
+  const me = getCurrentSocialUserId();
+  if (profileUserId !== me && isBlocked(profileUserId)) return [];
+  return getPostsByUser(profileUserId);
 }
 
 /* ------------------------------------------------------------------ */
@@ -195,15 +244,15 @@ function calculateTrendScore(post: SocialPost): number {
 }
 
 export function getTrendingPosts(limit = 15): SocialPost[] {
-  const posts = getAllPosts();
+  const posts = filterBlockedAndMutedAuthors(filterPublished(getAllPosts()));
   return [...posts]
     .sort((a, b) => calculateTrendScore(b) - calculateTrendScore(a))
     .slice(0, limit);
 }
 
 export function getTrendingVideos(limit = 20): SocialPost[] {
-  const posts = getAllPosts().filter((p) =>
-    p.media?.some((m) => m.type === "video")
+  const posts = filterBlockedAndMutedAuthors(filterPublished(getAllPosts())).filter(
+    (p) => p.media?.some((m) => m.type === "video")
   );
   return [...posts]
     .sort((a, b) => calculateTrendScore(b) - calculateTrendScore(a))
@@ -213,7 +262,7 @@ export function getTrendingVideos(limit = 20): SocialPost[] {
 /** Extract unique hashtags from post captions (e.g. #technology) */
 export function getHashtagsFromPosts(): { tag: string; count: number }[] {
   const count: Record<string, number> = {};
-  getAllPosts().forEach((p) => {
+  filterBlockedAndMutedAuthors(filterPublished(getAllPosts())).forEach((p) => {
     const matches = (p.caption ?? "").match(/#[\wğüşıöçĞÜŞİÖÇ]+/g) ?? [];
     matches.forEach((tag) => {
       const key = tag.toLowerCase();
@@ -231,15 +280,11 @@ export function getHashtagsFromPosts(): { tag: string; count: number }[] {
 /* ------------------------------------------------------------------ */
 
 export function getExplorePosts(): SocialPost[] {
-  if (EXPLORE_CACHE) return EXPLORE_CACHE;
-
-  const posts = getAllPosts();
-
-  const shuffled = [...posts].sort(() => Math.random() - 0.5);
-
-  EXPLORE_CACHE = shuffled;
-
-  return shuffled;
+  if (!EXPLORE_CACHE) {
+    const posts = filterBlockedAndMutedAuthors(filterPublished(getAllPosts()));
+    EXPLORE_CACHE = [...posts].sort(() => Math.random() - 0.5);
+  }
+  return filterBlockedAndMutedAuthors(EXPLORE_CACHE);
 }
 
 /* ------------------------------------------------------------------ */
@@ -268,7 +313,9 @@ export function loadMoreFeedPosts() {
     const base = getBaseFeedPosts();
 
     const start = PAGE * PAGE_SIZE;
-    const next = base.slice(start, start + PAGE_SIZE);
+    const next = filterBlockedAndMutedAuthors(
+      base.slice(start, start + PAGE_SIZE)
+    );
 
     if (next.length === 0) {
       HAS_MORE = false;
@@ -334,6 +381,57 @@ export function updatePost(post: SocialPost) {
   emit();
 }
 
+/**
+ * Kısmi alan güncellemesi — tek kaynak POST_MAP.
+ * İç içe `settings` / `videoCovers` birleştirilir.
+ */
+export function updateFeedPost(postId: string, patch: Partial<SocialPost>) {
+  const cur = POST_MAP[postId];
+  if (!cur) return;
+
+  const next: SocialPost = { ...cur, ...patch };
+
+  if (patch.settings !== undefined) {
+    next.settings = mergeSettings(cur.settings, patch.settings);
+  }
+
+  if (patch.videoCovers !== undefined) {
+    next.videoCovers = { ...(cur.videoCovers ?? {}), ...patch.videoCovers };
+  }
+
+  POST_MAP[postId] = next;
+  invalidateCache();
+  emit();
+}
+
+export function archiveFeedPost(postId: string) {
+  const p = POST_MAP[postId];
+  if (!p) return;
+  POST_MAP[postId] = { ...p, archived: true };
+  invalidateCache();
+  emit();
+}
+
+export function unarchiveFeedPost(postId: string) {
+  const p = POST_MAP[postId];
+  if (!p) return;
+  POST_MAP[postId] = { ...p, archived: false };
+  invalidateCache();
+  emit();
+}
+
+export function removeFeedPost(postId: string) {
+  if (!POST_MAP[postId]) return;
+
+  delete POST_MAP[postId];
+  POST_ORDER = POST_ORDER.filter((id) => id !== postId);
+  delete COMMENTS[postId];
+  SAVED_POST_IDS.delete(postId);
+
+  invalidateCache();
+  emit();
+}
+
 /* ------------------------------------------------------------------ */
 /* REPLACE FEED                                                       */
 /* ------------------------------------------------------------------ */
@@ -353,23 +451,35 @@ export function replaceFeedPosts(nextPosts: SocialPost[]) {
 }
 
 /* ------------------------------------------------------------------ */
-/* LIKE (single source)                                               */
+/* LIKE (FAZ 5 — tek kaynak: likedByMe + likeCount)                    */
 /* ------------------------------------------------------------------ */
 
+/** Beğen / beğeniyi kaldır; sayaç ve `likedByMe` güncellenir, abonelere bildirilir. */
 export function toggleLike(postId: string): void {
   const post = POST_MAP[postId];
   if (!post) return;
 
+  const wasLiked = post.likedByMe;
+  const n = post.likeCount ?? 0;
   const next = {
     ...post,
     likedByMe: !post.likedByMe,
-    likeCount: post.likedByMe
-      ? Math.max(0, post.likeCount - 1)
-      : post.likeCount + 1,
+    likeCount: post.likedByMe ? Math.max(0, n - 1) : n + 1,
   };
   POST_MAP[postId] = next;
   invalidateCache();
   emit();
+
+  const me = getCurrentSocialUserId();
+  if (!wasLiked && next.likedByMe && post.userId !== me) {
+    notifyPostLiked({
+      actorUserId: me,
+      actorUsername: getSocialDisplayName(me),
+      actorAvatarUri: null,
+      postOwnerUserId: post.userId,
+      postId,
+    });
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -382,11 +492,12 @@ export function getComments(postId: string): SocialComment[] {
 
 export function addComment(
   postId: string,
-  comment: Omit<SocialComment, "id" | "createdAt">
+  comment: Omit<SocialComment, "id" | "createdAt" | "postId">
 ): SocialComment {
   const post = POST_MAP[postId];
   const newComment: SocialComment = {
     ...comment,
+    postId,
     id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     createdAt: new Date().toISOString(),
   };
@@ -402,6 +513,18 @@ export function addComment(
   }
   recordCommentAdded(postId);
   emit();
+
+  if (post && comment.userId !== post.userId) {
+    notifyPostCommented({
+      actorUserId: comment.userId,
+      actorUsername: comment.username,
+      actorAvatarUri: null,
+      postOwnerUserId: post.userId,
+      postId,
+      commentText: comment.text,
+    });
+  }
+
   return newComment;
 }
 
@@ -424,26 +547,32 @@ export function resetFeedPosts() {
 /* ------------------------------------------------------------------ */
 
 export function toggleSave(postId: string): void {
-  toggleSavedPost(postId);
+  toggleSavePost(postId);
 }
 
 export function toggleSavedPost(postId: string) {
-  SAVED = {
-    ...SAVED,
-    [postId]: !SAVED[postId],
-  };
+  toggleSavePost(postId);
+}
 
+export function toggleSavePost(postId: string) {
+  if (SAVED_POST_IDS.has(postId)) {
+    SAVED_POST_IDS.delete(postId);
+  } else {
+    SAVED_POST_IDS.add(postId);
+  }
   emit();
 }
 
 export function isPostSaved(postId: string): boolean {
-  return !!SAVED[postId];
+  return SAVED_POST_IDS.has(postId);
 }
 
 export function getSavedPosts(): SocialPost[] {
-  return POST_ORDER
-    .map((id) => POST_MAP[id])
-    .filter((p) => SAVED[p.id]);
+  return filterBlockedAndMutedAuthors(
+    filterPublished(
+      POST_ORDER.map((id) => POST_MAP[id]).filter((p) => SAVED_POST_IDS.has(p.id))
+    )
+  );
 }
 
 /* ------------------------------------------------------------------ */
