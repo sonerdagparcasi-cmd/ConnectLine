@@ -200,6 +200,7 @@ export type SocialFollowAction =
 
 export type SocialNotificationType =
   | "follow"
+  | "follow_request"
   | "like"
   | "comment"
   | "share"

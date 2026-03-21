@@ -11,6 +11,8 @@ import SocialFeedScreen from "../screens/SocialFeedScreen";
 import SocialMediaPreviewScreen from "../screens/SocialMediaPreviewScreen";
 import SocialPostDetailScreen from "../screens/SocialPostDetailScreen";
 import SocialProfileContainerScreen from "../screens/SocialProfileContainerScreen";
+import SocialFollowListScreen from "../screens/SocialFollowListScreen";
+import SocialFollowRequestsScreen from "../screens/SocialFollowRequestsScreen";
 import SocialStoryViewerScreen from "../screens/SocialStoryViewerScreen";
 
 import SocialCreateEventScreen from "../screens/SocialCreateEventScreen";
@@ -50,6 +52,10 @@ import type { SocialMediaItem } from "../types/social.types";
 
 export type SocialStackParamList = {
   SocialProfileContainer: { userId?: string } | undefined;
+
+  SocialFollowList: { userId: string; type: "followers" | "mutual" };
+
+  SocialFollowRequests: undefined;
 
   SocialHome: undefined;
 
@@ -164,6 +170,10 @@ export default function SocialNavigator({ entry = "feed" }: Props) {
         name="SocialProfileContainer"
         component={SocialProfileContainerScreen}
       />
+
+      <Stack.Screen name="SocialFollowList" component={SocialFollowListScreen} />
+
+      <Stack.Screen name="SocialFollowRequests" component={SocialFollowRequestsScreen} />
 
       {/* PROFILE SETTINGS */}
       <Stack.Screen name="SocialHome" component={SocialHomeScreen} />

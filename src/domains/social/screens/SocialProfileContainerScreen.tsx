@@ -36,9 +36,12 @@ import {
   subscribeFeed,
 } from "../services/socialFeedStateService";
 import {
+  blockUser,
   getMutualConnections,
   getSuggestedUsers,
+  isBlocked,
   isFollowing,
+  sendFollowRequest,
   subscribeFollow,
   toggleFollow,
 } from "../services/socialFollowService";
@@ -59,6 +62,7 @@ export default function SocialProfileContainerScreen() {
 
   const [tab, setTab] = useState<Tab>("posts");
   const [following, setFollowing] = useState(() => isFollowing(profile.userId));
+  const [blocked, setBlocked] = useState(() => isBlocked(profile.userId));
 
   const [feedPosts, setFeedPosts] = useState<SocialPost[]>(() =>
     getPostsByUser(profile.userId)
@@ -67,7 +71,15 @@ export default function SocialProfileContainerScreen() {
   const [userEvents, setUserEvents] = useState<SocialEvent[]>([]);
 
   useEffect(() => {
-    const unsub = subscribeFollow(() => setFollowing(isFollowing(profile.userId)));
+    setFollowing(isFollowing(profile.userId));
+    setBlocked(isBlocked(profile.userId));
+  }, [profile.userId]);
+
+  useEffect(() => {
+    const unsub = subscribeFollow(() => {
+      setFollowing(isFollowing(profile.userId));
+      setBlocked(isBlocked(profile.userId));
+    });
     return unsub;
   }, [profile.userId]);
 
@@ -127,8 +139,19 @@ export default function SocialProfileContainerScreen() {
 
   const handleVisitorAction = useCallback(
     (id: string) => {
-      if (id === "follow") toggleFollow(profile.userId);
-      else if (id === "message") Alert.alert("", "Mesaj (UI-only)");
+      if (id === "follow") {
+        sendFollowRequest("me", profile.userId);
+        addNotification({
+          id: `follow_req_${Date.now()}`,
+          type: "follow_request",
+          actorUserId: "me",
+          actorUsername: "sen",
+          targetUserId: profile.userId,
+          text: "sana takip isteği gönderdi",
+          createdAt: new Date().toISOString(),
+          read: false,
+        });
+      } else if (id === "message") Alert.alert("", "Mesaj (UI-only)");
       else if (id === "shareProfile") Alert.alert("", "Profili paylaş (UI-only)");
       else if (id === "blockUser") Alert.alert("", "Engelle (UI-only)");
       else if (id === "reportUser") Alert.alert("", "Bildir (UI-only)");
@@ -177,72 +200,113 @@ export default function SocialProfileContainerScreen() {
 
             <View style={styles.rightColumn}>
               <View style={styles.profileFacts}>
-                <View style={[styles.factRow, { marginLeft: "auto", marginRight: 60 }]}>
+                {/* KONUM */}
+                <View style={[styles.factRow, { marginLeft: "auto", marginRight: 0 }]}>
+                  <Text style={[styles.baseText, { color: primaryText }]}>
+                    📍 {profile.location || "Konum eklenmedi"}
+                  </Text>
+                </View>
+
+                {/* EĞİTİM */}
+                <View style={[styles.factRow, { marginLeft: "auto", marginRight: 0 }]}>
+                  <Text style={[styles.baseText, { color: primaryText }]}>
+                    🎓 {profile.education || "Eğitim eklenmedi"}
+                  </Text>
+                </View>
+
+                {/* MESLEK */}
+                <View style={[styles.factRow, { marginLeft: "auto", marginRight: 0 }]}>
+                  <Text style={[styles.baseText, { color: primaryText }]}>
+                    💼 {profile.job || "Meslek eklenmedi"}
+                  </Text>
+                </View>
+
+                {/* TAKİPÇİ */}
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  style={[styles.factRow, { marginLeft: "auto", marginRight: 0 }]}
+                  onPress={() =>
+                    navigation.navigate("SocialFollowList", {
+                      userId: profile.userId,
+                      type: "followers",
+                    })
+                  }
+                >
                   <Text style={[styles.baseText, { color: primaryText }]}>
                     👤 Takipçi {stats.followers}
                   </Text>
-                </View>
-                <View style={[styles.factRow, { marginLeft: "auto", marginRight: -2 }]}>
+                </TouchableOpacity>
+
+                {/* ORTAK ARKADAŞ */}
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  style={[styles.factRow, { marginLeft: "auto", marginRight: 0 }]}
+                  onPress={() =>
+                    navigation.navigate("SocialFollowList", {
+                      userId: profile.userId,
+                      type: "mutual",
+                    })
+                  }
+                >
                   <Text style={[styles.baseText, { color: primaryText }]}>
                     👥 Ortak Arkadaşlar {mutualConnections}
                   </Text>
+                </TouchableOpacity>
+              </View>
+
+              {!isOwner && (
+                <View style={[styles.actionsRow, { marginLeft: "auto", marginRight: -16 }]}>
+                  {!following && !blocked && (
+                    <TouchableOpacity
+                      activeOpacity={0.6}
+                      style={styles.textAction}
+                      onPress={() => {
+                        sendFollowRequest("me", profile.userId);
+                        addNotification({
+                          id: `follow_req_${Date.now()}`,
+                          type: "follow_request",
+                          actorUserId: "me",
+                          actorUsername: "sen",
+                          targetUserId: profile.userId,
+                          text: "sana takip isteği gönderdi",
+                          createdAt: new Date().toISOString(),
+                          read: false,
+                        });
+                      }}
+                    >
+                      <Text style={[styles.baseText, { color: primaryText }]}>Takip Et</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {following && !blocked && (
+                    <TouchableOpacity
+                      activeOpacity={0.6}
+                      style={styles.textAction}
+                      onPress={() => {
+                        toggleFollow(profile.userId);
+                        setFollowing(false);
+                      }}
+                    >
+                      <Text style={[styles.baseText, { color: primaryText }]}>Takibi Bırak</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    activeOpacity={0.6}
+                    style={styles.textAction}
+                    onPress={() => {
+                      if (!blocked) {
+                        blockUser(profile.userId);
+                        setBlocked(true);
+                      }
+                    }}
+                  >
+                    <Text style={[styles.baseText, { color: dangerText }]}>
+                      {blocked ? "Engellendi" : "Engelle"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-  activeOpacity={0.6}
-  style={[styles.factRow, { marginLeft: "auto", marginRight: 20 }]}
-  onPress={() => navigation.navigate("SocialCreateEvent")}
->
-  <Text style={[styles.baseText, { color: primaryText }]}>
-    📅 Etkinlik Oluştur
-  </Text>
-</TouchableOpacity>
-              </View>
-
-              <View style={[styles.actionsRow, { marginLeft: "auto", marginRight: -16 }]}>
-                <TouchableOpacity
-                  activeOpacity={0.6}
-                  style={styles.textAction}
-                  onPress={() => {
-                    if (!following) {
-                      addNotification({
-                        id: `follow_${Date.now()}`,
-                        type: "follow",
-                        actorUserId: "me",
-                        actorUsername: "sen",
-                        targetUserId: profile.userId,
-                        text: "seni takip etti",
-                        createdAt: new Date().toISOString(),
-                        read: false,
-                      });
-                    }
-                    toggleFollow(profile.userId);
-                  }}
-                >
-                  <Text style={[styles.baseText, { color: primaryText }]}>
-                    Takip Et
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.6}
-                  style={styles.textAction}
-                  onPress={() => toggleFollow(profile.userId)}
-                >
-                  <Text style={[styles.baseText, { color: primaryText }]}>
-                    Takibi Bırak
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.6}
-                  style={styles.textAction}
-                  onPress={() => handleVisitorAction("blockUser")}
-                >
-                  <Text style={[styles.baseText, { color: dangerText }]}>
-                    Engelle
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              )}
             </View>
           </View>
         </View>
@@ -290,6 +354,14 @@ export default function SocialProfileContainerScreen() {
                 ? navigation.navigate("SocialCreatePost")
                 : handleVisitorAction("shareProfile")
             }
+            activeColor={primaryText}
+            inactiveColor={mutedTextColor}
+            tabUnderlineColor={tabUnderlineColor}
+          />
+          <TabBtn
+            label="Etkinlik Oluştur"
+            active={false}
+            onPress={() => navigation.navigate("SocialCreateEvent")}
             activeColor={primaryText}
             inactiveColor={mutedTextColor}
             tabUnderlineColor={tabUnderlineColor}
@@ -469,16 +541,16 @@ function TabBtn({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  headerWrap: { paddingBottom: 0 },
+  headerWrap: { paddingBottom: -6 },
   headerContainer: {
-    paddingBottom: 10,
+    paddingBottom: 8,
   },
   tabContainer: {
     paddingBottom: 8,
   },
   profileCard: {
     paddingHorizontal: 18,
-    paddingTop: 18,
+    paddingTop: 10,
   },
   headerContentRow: {
     flexDirection: "row",
@@ -499,8 +571,8 @@ const styles = StyleSheet.create({
      alignItems: "flex-start",
   },
   avatar: {
-    width: 68,
-    height: 68,
+    width: 70,
+    height: 70,
     borderRadius: 16,
     borderWidth: 1,
     overflow: "hidden",
@@ -536,7 +608,7 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 56,
+    marginTop: 43,
     flexWrap: "nowrap",
     justifyContent: "flex-end",
   },

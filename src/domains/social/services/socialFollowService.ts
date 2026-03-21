@@ -24,6 +24,23 @@ let MUTED: Set<string> = new Set();
 let listeners: Array<() => void> = [];
 
 /* ------------------------------------------------------------------ */
+/* FOLLOW REQUESTS                                                    */
+/* ------------------------------------------------------------------ */
+
+export type FollowRequest = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  createdAt: string;
+};
+
+let FOLLOW_REQUESTS: FollowRequest[] = [];
+
+function resolveSocialUserId(userId: string) {
+  return userId === "me" ? CURRENT_USER_ID : userId;
+}
+
+/* ------------------------------------------------------------------ */
 /* USERS                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -75,6 +92,48 @@ export function toggleFollow(userId: string) {
   }
 }
 
+export function sendFollowRequest(fromUserId: string, toUserId: string) {
+  const fromId = resolveSocialUserId(fromUserId);
+  const toId = resolveSocialUserId(toUserId);
+  if (fromId === toId) return;
+
+  FOLLOW_REQUESTS.push({
+    id: `req_${Date.now()}`,
+    fromUserId: fromId,
+    toUserId: toId,
+    createdAt: new Date().toISOString(),
+  });
+
+  emit();
+}
+
+export function getFollowRequests(userId: string) {
+  const uid = resolveSocialUserId(userId);
+  return FOLLOW_REQUESTS.filter((r) => r.toUserId === uid);
+}
+
+/**
+ * İsteği kabul et: istek gönderen (fromUserId) hedefi (toUserId) takip eder.
+ * Mock’ta FOLLOWING sadece CURRENT_USER_ID için tutulduğundan, ilişki
+ * yalnızca fromUserId === CURRENT_USER_ID iken followUser ile kurulur.
+ */
+export function acceptFollowRequest(id: string) {
+  const req = FOLLOW_REQUESTS.find((r) => r.id === id);
+  if (!req) return;
+
+  if (req.fromUserId === CURRENT_USER_ID) {
+    followUser(req.toUserId);
+  }
+
+  FOLLOW_REQUESTS = FOLLOW_REQUESTS.filter((r) => r.id !== id);
+  emit();
+}
+
+export function rejectFollowRequest(id: string) {
+  FOLLOW_REQUESTS = FOLLOW_REQUESTS.filter((r) => r.id !== id);
+  emit();
+}
+
 /* ------------------------------------------------------------------ */
 /* GETTERS                                                            */
 /* ------------------------------------------------------------------ */
@@ -119,7 +178,8 @@ export function getFollowers(userId?: string) {
 /* MUTUAL CONNECTIONS                                                 */
 /* ------------------------------------------------------------------ */
 
-export function getMutualConnections(userId: string): number {
+/** Ortak bağlantı kullanıcıları (liste ekranı); sayı ile aynı mantık */
+export function getMutualConnectionUsers(userId: string) {
   const myFollowing = getFollowingIds();
 
   const otherFollowing: string[] = [];
@@ -128,9 +188,17 @@ export function getMutualConnections(userId: string): number {
     otherFollowing.push(userId);
   }
 
-  const mutual = myFollowing.filter((id) => otherFollowing.includes(id));
+  const mutualIds = myFollowing.filter((id) => otherFollowing.includes(id));
+  const byId = Object.fromEntries(getAllUsers().map((u) => [u.userId, u]));
 
-  return mutual.length;
+  return mutualIds.map((id) => byId[id]).filter(Boolean) as {
+    userId: string;
+    username: string;
+  }[];
+}
+
+export function getMutualConnections(userId: string): number {
+  return getMutualConnectionUsers(userId).length;
 }
 
 /* ------------------------------------------------------------------ */

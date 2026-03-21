@@ -410,6 +410,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "social.time.dayAgo": "{{d}} gün",
 
     "social.follow": "Takip Et",
+    "social.followRequests": "Takip İstekleri",
+    "social.followRequestAccept": "Kabul Et",
+    "social.followRequestDismiss": "Yok Say",
     "social.followers": "Takipçi",
     "social.posts": "Gönderi",
     "social.events": "Etkinlikler",
@@ -494,6 +497,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "social.empty.notifications": "Yeni aktiviteler burada görünecek",
     "social.empty.feed": "Henüz gönderi yok",
     "social.empty.saved": "Kaydettiğin gönderi yok",
+    "social.empty.followers": "Liste boş",
+    "social.empty.followRequests": "Bekleyen takip isteği yok",
+    "social.empty.mutualConnections": "Ortak bağlantı yok",
   },
 
   en: {
@@ -902,6 +908,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "social.time.dayAgo": "{{d}} d",
 
     "social.follow": "Follow",
+    "social.followRequests": "Follow requests",
+    "social.followRequestAccept": "Accept",
+    "social.followRequestDismiss": "Dismiss",
     "social.followers": "Followers",
     "social.posts": "Posts",
     "social.events": "Events",
@@ -986,6 +995,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "social.empty.notifications": "New activity will appear here",
     "social.empty.feed": "No posts yet",
     "social.empty.saved": "No saved posts",
+    "social.empty.followers": "No one to show",
+    "social.empty.followRequests": "No pending follow requests",
+    "social.empty.mutualConnections": "No mutual connections",
   },
 };
 

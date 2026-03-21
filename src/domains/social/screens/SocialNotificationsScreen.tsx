@@ -23,6 +23,7 @@ import SocialScreenLayout from "../components/SocialScreenLayout";
 
 import { getPostById } from "../services/socialFeedStateService";
 import {
+  applySocialNotificationNavigation,
   getNotifications,
   getUnreadNotificationCount,
   markAllNotificationsRead,
@@ -40,6 +41,8 @@ function getNotificationIcon(type: SocialNotificationType): keyof typeof Ionicon
       return "heart";
     case "follow":
       return "person-add";
+    case "follow_request":
+      return "mail-unread-outline";
     case "comment":
       return "chatbubble";
     case "share":
@@ -142,6 +145,14 @@ export default function SocialNotificationsScreen() {
   const openNotification = useCallback(
     (n: SocialNotification) => {
       markNotificationRead(n.id);
+
+      if (
+        applySocialNotificationNavigation(n, (screen, params) =>
+          navigation.navigate(screen as keyof SocialStackParamList, params as never)
+        )
+      ) {
+        return;
+      }
 
       if (n.postId) {
         navigation.navigate("SocialPostDetail", { postId: n.postId });

@@ -168,6 +168,26 @@ export function subscribeNotifications(listener: () => void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* NAVIGATION (UI: navigate callback ile çağır)                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Bildirim tipine göre hedef ekranı aç.
+ * @returns true ise eşleşen rota işlendi; çağıran başka yönlendirme yapmasın.
+ */
+export function applySocialNotificationNavigation(
+  notification: SocialNotification,
+  navigate: (screen: string, params?: Record<string, unknown>) => void
+): boolean {
+  if (notification.type === "follow_request") {
+    navigate("SocialFollowRequests");
+    return true;
+  }
+
+  return false;
+}
+
+/* ------------------------------------------------------------------ */
 /* INTERNAL                                                           */
 /* ------------------------------------------------------------------ */
 
