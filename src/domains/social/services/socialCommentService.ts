@@ -1,32 +1,35 @@
 // src/domains/social/services/socialCommentService.ts
-// FAZ 5 — Yorum API’si (depolama: socialFeedStateService tek kaynak)
+// FAZ 5 / ADIM 3 — Yorum API (UI); depolama: socialFeedStateService (tek kaynak)
 
 import type { SocialComment } from "../types/social.types";
 import {
-  addComment as addCommentToFeedStore,
-  getComments as getCommentsFromFeedStore,
+  addComment as addCommentToFeed,
+  getComments as getCommentsFromFeed,
+  subscribeFeed,
 } from "./socialFeedStateService";
+import { getCurrentSocialUserId } from "./socialFollowService";
 
-export type AddSocialCommentInput = {
-  userId: string;
-  text: string;
-  username?: string;
-};
+/** Gönderi yorumu (feed ile aynı şema) */
+export type Comment = SocialComment;
 
-/** Gönderiye yorum ekler; post.commentCount ve commentsPreview güncellenir. */
-export function addComment(
-  postId: string,
-  input: AddSocialCommentInput
-): SocialComment {
-  const username = input.username?.trim() || input.userId;
-  return addCommentToFeedStore(postId, {
-    userId: input.userId,
-    username,
-    text: input.text.trim(),
+/**
+ * Yorum ekler; feed’deki `commentCount` / önizleme güncellenir.
+ * Bildirim: `socialFeedStateService.addComment` → `notifyPostCommented` (tek kaynak).
+ */
+export function addComment(postId: string, text: string): void {
+  if (!text.trim()) return;
+  addCommentToFeed(postId, {
+    userId: getCurrentSocialUserId(),
+    username: "Sen",
+    text: text.trim(),
   });
 }
 
-/** Gönderinin yorum listesi (en yeni üstte). */
 export function getComments(postId: string): SocialComment[] {
-  return getCommentsFromFeedStore(postId);
+  return getCommentsFromFeed(postId);
+}
+
+/** Feed ile aynı olay döngüsü — yorum eklendiğinde tetiklenir. */
+export function subscribeComments(listener: () => void) {
+  return subscribeFeed(listener);
 }

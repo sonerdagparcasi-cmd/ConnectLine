@@ -39,11 +39,12 @@ import {
   blockUser,
   getMutualConnections,
   getSuggestedUsers,
-  isBlocked,
   isFollowing,
+  isUserBlocked,
   sendFollowRequest,
   subscribeFollow,
   toggleFollow,
+  unblockUser,
 } from "../services/socialFollowService";
 import type { SocialPost } from "../types/social.types";
 
@@ -61,7 +62,7 @@ export default function SocialProfileContainerScreen() {
 
   const [tab, setTab] = useState<Tab>("posts");
   const [following, setFollowing] = useState(() => isFollowing(profile.userId));
-  const [blocked, setBlocked] = useState(() => isBlocked(profile.userId));
+  const [blocked, setBlocked] = useState(() => isUserBlocked(profile.userId));
 
   const [feedPosts, setFeedPosts] = useState<SocialPost[]>(() =>
     getProfilePostsVisibleToCurrentUser(profile.userId)
@@ -72,7 +73,7 @@ export default function SocialProfileContainerScreen() {
   useEffect(() => {
     const sync = () => {
       setFollowing(isFollowing(profile.userId));
-      setBlocked(isBlocked(profile.userId));
+      setBlocked(isUserBlocked(profile.userId));
       setFeedPosts(getProfilePostsVisibleToCurrentUser(profile.userId));
       setSavedList(getSavedPosts());
     };
@@ -104,7 +105,7 @@ export default function SocialProfileContainerScreen() {
     () => feedPosts.filter((p) => p.media?.some((m) => m.type === "video")),
     [feedPosts]
   );
-  const savedPosts = savedList;
+  const savedPosts = isOwner ? savedList : [];
   const mutualConnections =
     isOwner ? 0 : blocked ? 0 : getMutualConnections(profile.userId);
   const primaryText = T.isDark ? "#FFFFFF" : "#000000";
@@ -272,15 +273,12 @@ export default function SocialProfileContainerScreen() {
                     activeOpacity={0.6}
                     style={styles.textAction}
                     onPress={() => {
-                      if (!blocked) {
-                        blockUser(profile.userId);
-                        setBlocked(true);
-                      }
+                      blockUser(profile.userId);
+                      setBlocked(true);
+                      Alert.alert("", "Kullanıcı engellendi");
                     }}
                   >
-                    <Text style={[styles.baseText, { color: dangerText }]}>
-                      {blocked ? "Engellendi" : "Engelle"}
-                    </Text>
+                    <Text style={[styles.baseText, { color: dangerText }]}>Engelle</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -288,14 +286,6 @@ export default function SocialProfileContainerScreen() {
           </View>
         </View>
       </LinearGradient>
-
-      {!isOwner && blocked ? (
-        <View style={styles.blockedNoticeWrap}>
-          <Text style={[styles.blockedNoticeText, { color: mutedTextColor }]}>
-            Bu kullanıcıyı engellediniz. Gönderiler ve etkinlikler gizlendi.
-          </Text>
-        </View>
-      ) : null}
 
       <LinearGradient colors={headerGradient} style={styles.tabContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
@@ -459,6 +449,44 @@ export default function SocialProfileContainerScreen() {
     [T, profileSuggested, navigation]
   );
 
+  if (!isOwner && blocked) {
+    return (
+      <View style={[styles.root, { backgroundColor: T.backgroundColor }]}>
+        <View style={styles.blockedStateRoot}>
+          {navigation.canGoBack() ? (
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              hitSlop={12}
+              style={styles.blockedBackBtn}
+            >
+              <Ionicons name="chevron-back" size={26} color={T.textColor} />
+            </TouchableOpacity>
+          ) : null}
+          <Ionicons name="ban-outline" size={52} color={mutedTextColor} />
+          <Text style={[styles.blockedStateTitle, { color: T.textColor }]}>
+            Bu kullanıcı engellendi
+          </Text>
+          <Text style={[styles.blockedStateSub, { color: mutedTextColor }]}>
+            @{profile.username}
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.blockedPrimaryBtn, { borderColor: T.border }]}
+            onPress={() => {
+              unblockUser(profile.userId);
+              setBlocked(false);
+              Alert.alert("", "Engel kaldırıldı");
+            }}
+          >
+            <Text style={[styles.blockedPrimaryBtnText, { color: primaryText }]}>
+              Engeli Kaldır
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.root, { backgroundColor: T.backgroundColor }]}>
       {isEventsTab ? (
@@ -527,14 +555,40 @@ function TabBtn({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   headerWrap: { paddingBottom: -6 },
-  blockedNoticeWrap: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+  blockedStateRoot: {
+    flex: 1,
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  blockedNoticeText: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    fontWeight: "500",
+  blockedBackBtn: {
+    position: "absolute",
+    left: 16,
+    top: 16,
+    zIndex: 2,
+  },
+  blockedStateTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    marginTop: 20,
+    textAlign: "center",
+  },
+  blockedStateSub: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  blockedPrimaryBtn: {
+    marginTop: 28,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  blockedPrimaryBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
   },
   headerContainer: {
     paddingBottom: 8,

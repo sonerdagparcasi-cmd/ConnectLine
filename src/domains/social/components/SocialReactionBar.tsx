@@ -5,7 +5,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
-import { SOCIAL_LIKE_ACTIVE_COLOR } from "../constants/socialInteraction";
 
 type Props = {
   liked: boolean;
@@ -38,8 +37,8 @@ export default function SocialReactionBar({
   onToggleSave,
 }: Props) {
   const T = useAppTheme();
-
-  const likeColor = liked ? SOCIAL_LIKE_ACTIVE_COLOR : T.textColor;
+  const likeColor = T.isDark ? "#1834ae" : "#00bfff";
+  const likeIconAndCountColor = liked ? likeColor : T.textColor;
 
   return (
     <View style={styles.row}>
@@ -53,14 +52,14 @@ export default function SocialReactionBar({
         <Ionicons
           name={liked ? "heart" : "heart-outline"}
           size={20}
-          color={likeColor}
+          color={likeIconAndCountColor}
         />
 
         {showLikeCount ? (
           <Text
             style={[
               styles.txt,
-              { color: likeColor },
+              { color: likeIconAndCountColor },
             ]}
           >
             {likeCount}

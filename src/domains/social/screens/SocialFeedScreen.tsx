@@ -1,24 +1,23 @@
 // src/domains/social/screens/SocialFeedScreen.tsx
-// 🔒 SOCIAL FEED – PERFORMANCE + VIRTUALIZATION GUARD
-// UPDATE: My Events section added (feed footer)
+// 🔒 SOCIAL FEED — REELS MODE (vertical fullscreen, flex slot height via onLayout)
 
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  type ViewToken,
 } from "react-native";
 
-import { useAppTheme } from "../../../shared/theme/appTheme";
 import { t } from "../../../shared/i18n/t";
+import SocialNotificationBell from "../components/SocialNotificationBell";
 import SocialPostCard from "../components/SocialPostCard";
-import SocialStoriesRail from "../components/SocialStoriesRail";
 
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 
@@ -35,8 +34,8 @@ import {
 import {
   blockUser,
   getCurrentSocialUserId,
-  isBlocked,
   isMuted,
+  isUserBlocked,
   subscribeFollow,
 } from "../services/socialFollowService";
 
@@ -46,10 +45,7 @@ import {
   reportUser,
 } from "../services/socialReportService";
 
-import { SocialEvent, socialEventService } from "../services/socialEventService";
 import { addNotification } from "../services/socialNotificationService";
-
-import { getStories } from "../services/socialStoryStateService";
 
 import type { SocialPost } from "../types/social.types";
 
@@ -58,50 +54,32 @@ import type { SocialPost } from "../types/social.types";
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
 
 /* ------------------------------------------------------------------ */
-/* VIRTUALIZATION CONFIG                                              */
-/* ------------------------------------------------------------------ */
-
-const ITEM_HEIGHT = 460;
-
-/* ------------------------------------------------------------------ */
 
 export default function SocialFeedScreen() {
-  const T = useAppTheme();
   const navigation = useNavigation<Nav>();
 
   const [posts, setPosts] = useState<SocialPost[]>(() => getFeedPosts());
-  const [storiesTick, setStoriesTick] = useState(0);
-  const [events, setEvents] = useState<SocialEvent[]>([]);
   const [hiddenMap, setHiddenMap] = useState<Record<string, boolean>>({});
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [visibleIndex, setVisibleIndex] = useState(0);
+  const [slotHeight, setSlotHeight] = useState(0);
 
-  /* ------------------------------------------------------------------ */
-  /* LOAD EVENTS                                                        */
-  /* ------------------------------------------------------------------ */
-
-  useEffect(() => {
-    async function loadEvents() {
-      const e = await socialEventService.getEvents();
-      setEvents(e);
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      if (viewableItems.length > 0) {
+        const idx = viewableItems[0].index;
+        if (idx != null) setVisibleIndex(idx);
+      }
     }
-
-    loadEvents();
-  }, []);
-
-  /* ------------------------------------------------------------------ */
-  /* REALTIME FEED                                                      */
-  /* ------------------------------------------------------------------ */
+  );
 
   useEffect(() => {
     setPosts(getFeedPosts());
 
     const unsubFeed = subscribeFeed(() => {
       setPosts(getFeedPosts());
-      setLoadingMore(false);
     });
     const unsubFollow = subscribeFollow(() => {
       setPosts(getFeedPosts());
-      setStoriesTick((n) => n + 1);
     });
 
     return () => {
@@ -110,38 +88,22 @@ export default function SocialFeedScreen() {
     };
   }, []);
 
-  /* ------------------------------------------------------------------ */
-  /* FILTER                                                             */
-  /* ------------------------------------------------------------------ */
-
   const visiblePosts = useMemo(
     () =>
       posts.filter(
         (p) =>
           !hiddenMap[p.id] &&
-          !isBlocked(p.userId) &&
+          !isUserBlocked(p.userId) &&
           !isMuted(p.userId)
       ),
     [posts, hiddenMap]
   );
 
-  /* ------------------------------------------------------------------ */
-  /* PAGINATION                                                         */
-  /* ------------------------------------------------------------------ */
-
   const handleLoadMore = useCallback(() => {
     const { hasMore, loading } = getFeedPagination();
-
     if (!hasMore || loading) return;
-
-    setLoadingMore(true);
-
     loadMoreFeedPosts();
   }, []);
-
-  /* ------------------------------------------------------------------ */
-  /* ACTIONS                                                            */
-  /* ------------------------------------------------------------------ */
 
   const handleToggleLike = useCallback((postId: string) => {
     const post = posts.find((p) => p.id === postId);
@@ -232,8 +194,11 @@ export default function SocialFeedScreen() {
           "",
           [
             ...REPORT_REASONS.map((r) => ({
-              text: t(r.labelKey),
-              onPress: () => reportPost(post.id, r.value),
+              text: r.labelTr,
+              onPress: () => {
+                reportPost(post.id, r.value);
+                Alert.alert("", "Bildirimin alındı");
+              },
             })),
             { text: t("common.cancel"), style: "cancel" as const },
           ]
@@ -246,8 +211,11 @@ export default function SocialFeedScreen() {
           "",
           [
             ...REPORT_REASONS.map((r) => ({
-              text: t(r.labelKey),
-              onPress: () => reportUser(post.userId, r.value),
+              text: r.labelTr,
+              onPress: () => {
+                reportUser(post.userId, r.value);
+                Alert.alert("", "Bildirimin alındı");
+              },
             })),
             { text: t("common.cancel"), style: "cancel" as const },
           ]
@@ -272,173 +240,120 @@ export default function SocialFeedScreen() {
           { text: t("social.report.post"), onPress: reportPostReason },
           {
             text: t("social.report.quick"),
-            onPress: () => reportPost(post.id),
+            onPress: () => {
+              reportPost(post.id);
+              Alert.alert("", "Bildirimin alındı");
+            },
           },
           { text: t("social.report.user"), onPress: reportUserReason },
-          { text: t("social.block"), onPress: () => blockUser(post.userId) }
+          {
+            text: t("social.block"),
+            onPress: () => {
+              blockUser(post.userId);
+              Alert.alert("", "Kullanıcı engellendi");
+            },
+          }
         );
       }
       buttons.push({ text: t("common.cancel"), style: "cancel" });
       Alert.alert(t("social.postDetail.title"), "", buttons);
     },
-    [hiddenMap]
+    [hiddenMap, navigation]
   );
-
-  /* ------------------------------------------------------------------ */
-  /* HEADER                                                             */
-  /* ------------------------------------------------------------------ */
-
-  const storiesForRail = useMemo(
-    () =>
-      getStories().filter(
-        (s) => !isMuted(s.userId) && !isBlocked(s.userId)
-      ),
-    [storiesTick]
-  );
-
-  const listHeader = useMemo(
-    () => (
-      <SocialStoriesRail
-        stories={storiesForRail}
-        onOpenStory={(userId) =>
-          navigation.navigate("SocialStoryViewer", {
-            initialUserId: userId,
-          })
-        }
-      />
-    ),
-    [navigation, storiesForRail]
-  );
-
-  /* ------------------------------------------------------------------ */
-  /* FOOTER – MY EVENTS                                                 */
-  /* ------------------------------------------------------------------ */
-
-  const listFooter = useMemo(() => {
-    if (!events.length) return null;
-
-    return (
-      <View style={styles.eventsBlock}>
-        <Text style={[styles.eventsTitle, { color: T.textColor }]}>
-          📅 {t("social.feed.myEvents")}
-        </Text>
-
-        {events.map((e) => (
-          <TouchableOpacity
-            key={e.id}
-            style={[
-              styles.eventCard,
-              { borderColor: T.border, backgroundColor: T.cardBg },
-            ]}
-            onPress={() =>
-              navigation.navigate("SocialEventDetail", { eventId: e.id })
-            }
-          >
-            <Text style={[styles.eventTitle, { color: T.textColor }]}>
-              {e.title}
-            </Text>
-
-            <Text style={{ color: T.mutedText }}>
-              {e.date} · {e.location}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  }, [events, navigation, T]);
-
-  /* ------------------------------------------------------------------ */
-  /* ITEM RENDER                                                        */
-  /* ------------------------------------------------------------------ */
 
   const renderItem = useCallback(
-    ({ item }: { item: SocialPost }) => (
-      <SocialPostCard
-        post={item}
-        saved={isPostSaved(item.id)}
-        onPressPost={() =>
-          navigation.navigate("SocialPostDetail", { postId: item.id })
+    ({ item, index }: { item: SocialPost; index: number }) => (
+      <View
+        style={
+          slotHeight > 0
+            ? { height: slotHeight, flexGrow: 0 }
+            : { flex: 1, minHeight: 0 }
         }
-        onPressMedia={(index) =>
-          navigation.navigate("SocialMediaPreview", {
-            media: item.media,
-            initialIndex: index,
-          })
-        }
-        onToggleLike={() => handleToggleLike(item.id)}
-        onPressComments={() =>
-          navigation.navigate("SocialPostDetail", { postId: item.id })
-        }
-        onPressMenu={() => openPostMenu(item)}
-        onPressShare={() => sharePost(item)}
-        onToggleSave={() => toggleSave(item.id)}
-      />
+      >
+        <SocialPostCard
+          post={item}
+          reels
+          isActive={index === visibleIndex}
+          saved={isPostSaved(item.id)}
+          onPressPost={() =>
+            navigation.navigate("SocialPostDetail", { postId: item.id })
+          }
+          onPressMedia={(mediaIndex) =>
+            navigation.navigate("SocialMediaPreview", {
+              media: item.media,
+              initialIndex: mediaIndex,
+            })
+          }
+          onToggleLike={() => handleToggleLike(item.id)}
+          onPressComments={() =>
+            navigation.navigate("SocialPostDetail", { postId: item.id })
+          }
+          onPressMenu={() => openPostMenu(item)}
+          onPressShare={() => sharePost(item)}
+          onToggleSave={() => toggleSave(item.id)}
+        />
+      </View>
     ),
-    [handleToggleLike, toggleSave, openPostMenu, sharePost, posts]
-  );
-
-  /* ------------------------------------------------------------------ */
-  /* ITEM LAYOUT                                                        */
-  /* ------------------------------------------------------------------ */
-
-  const getItemLayout = useCallback(
-    (_: any, index: number) => ({
-      length: ITEM_HEIGHT,
-      offset: ITEM_HEIGHT * index,
-      index,
-    }),
-    []
+    [
+      handleToggleLike,
+      toggleSave,
+      openPostMenu,
+      sharePost,
+      navigation,
+      visibleIndex,
+      slotHeight,
+    ]
   );
 
   const listEmpty = useMemo(
     () => (
-      <View style={[styles.emptyWrap, { backgroundColor: T.backgroundColor }]}>
-        <Ionicons name="newspaper-outline" size={48} color={T.mutedText} />
-        <Text style={[styles.emptyTitle, { color: T.textColor }]}>
-          {t("social.empty.feed")}
-        </Text>
+      <View style={styles.emptyWrap}>
+        <Ionicons name="newspaper-outline" size={48} color="#888" />
+        <Text style={styles.emptyTitle}>{t("social.empty.feed")}</Text>
       </View>
     ),
-    [T]
+    []
   );
 
-  /* ------------------------------------------------------------------ */
-
   return (
-    <View style={[styles.root, { backgroundColor: T.backgroundColor }]}>
+    <View style={styles.feedRoot}>
       <FlatList
         data={visiblePosts}
-        keyExtractor={(p) => p.id}
+        keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        ListHeaderComponent={listHeader}
-        ListFooterComponent={listFooter}
         ListEmptyComponent={listEmpty}
-
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0 && h !== slotHeight) setSlotHeight(h);
+        }}
+        pagingEnabled
+        snapToAlignment="start"
+        decelerationRate="fast"
         showsVerticalScrollIndicator={false}
-
+        style={styles.listFlex}
+        contentContainerStyle={styles.listContent}
+        onViewableItemsChanged={onViewableItemsChanged.current}
+        viewabilityConfig={{
+          itemVisiblePercentThreshold: 80,
+        }}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.6}
-
-        initialNumToRender={5}
-        maxToRenderPerBatch={5}
-        windowSize={7}
-        updateCellsBatchingPeriod={50}
+        initialNumToRender={2}
+        maxToRenderPerBatch={2}
+        windowSize={3}
         removeClippedSubviews
-
-        getItemLayout={getItemLayout}
-
-        maintainVisibleContentPosition={{
-          minIndexForVisible: 0,
-        }}
       />
 
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={() => navigation.navigate("SocialCreatePost")}
-        style={styles.topRightFab}
-      >
-        <Ionicons name="add" size={30} color={T.textColor} />
-      </TouchableOpacity>
+      <View style={styles.topRightActions}>
+        <SocialNotificationBell iconColor="#ffffff" />
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => navigation.navigate("SocialCreatePost")}
+          style={styles.topRightFab}
+        >
+          <Ionicons name="add" size={30} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -446,44 +361,34 @@ export default function SocialFeedScreen() {
 /* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-
-  topRightFab: {
+  feedRoot: { flex: 1, backgroundColor: "#000000" },
+  listFlex: { flex: 1 },
+  listContent: { flexGrow: 1 },
+  topRightActions: {
     position: "absolute",
     right: 12,
-    top: 12,
+    top: 52,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  topRightFab: {
     width: 44,
     height: 44,
+    marginLeft: 6,
     alignItems: "center",
     justifyContent: "center",
   },
-
-  eventsBlock: {
-    padding: 16,
-  },
-
-  eventsTitle: {
-    fontWeight: "900",
-    marginBottom: 10,
-    fontSize: 16,
-  },
-
-  eventCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-  },
-
-  eventTitle: {
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-
   emptyWrap: {
+    flex: 1,
     paddingVertical: 48,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 320,
   },
-  emptyTitle: { fontSize: 15, fontWeight: "600", marginTop: 12 },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginTop: 12,
+    color: "#ffffff",
+  },
 });

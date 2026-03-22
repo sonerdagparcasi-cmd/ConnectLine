@@ -47,6 +47,11 @@ export function getUnreadNotificationCount(): number {
   return NOTIFICATIONS.filter((n) => !n.read).length;
 }
 
+/** Alias (FAZ 5 / ADIM 4 API) */
+export function getUnreadCount(): number {
+  return getUnreadNotificationCount();
+}
+
 /* ------------------------------------------------------------------ */
 /* ADD                                                                */
 /* ------------------------------------------------------------------ */
@@ -64,7 +69,7 @@ export function addNotification(notification: SocialNotification) {
     NOTIFICATIONS = NOTIFICATIONS.slice(0, MAX_NOTIFICATIONS);
   }
 
-  emit();
+  notify();
 }
 
 /* ------------------------------------------------------------------ */
@@ -86,7 +91,7 @@ export function addNotifications(list: SocialNotification[]) {
     NOTIFICATIONS = NOTIFICATIONS.slice(0, MAX_NOTIFICATIONS);
   }
 
-  emit();
+  notify();
 }
 
 /* ------------------------------------------------------------------ */
@@ -116,7 +121,8 @@ export function notifyPostLiked(input: {
     actorAvatarUri: input.actorAvatarUri ?? null,
     targetUserId: input.postOwnerUserId,
     postId: input.postId,
-    text: "gönderini beğendi",
+    targetPostId: input.postId,
+    text: "paylaşımını beğendi",
     createdAt: new Date().toISOString(),
     read: false,
   });
@@ -144,6 +150,7 @@ export function notifyPostCommented(input: {
     actorAvatarUri: input.actorAvatarUri ?? null,
     targetUserId: input.postOwnerUserId,
     postId: input.postId,
+    targetPostId: input.postId,
     text: snippet ? `yorum yaptı: "${snippet}${ell}"` : "yorum yaptı",
     createdAt: new Date().toISOString(),
     read: false,
@@ -166,7 +173,7 @@ export function notifyFollowDirect(input: {
     actorUsername: input.actorUsername,
     actorAvatarUri: input.actorAvatarUri ?? null,
     targetUserId: input.targetUserId,
-    text: "seni takip etmeye başladı",
+    text: "seni takip etti",
     createdAt: new Date().toISOString(),
     read: false,
   });
@@ -210,7 +217,7 @@ export function markNotificationRead(notificationId: string) {
     return n;
   });
 
-  if (changed) emit();
+  if (changed) notify();
 }
 
 /* ------------------------------------------------------------------ */
@@ -229,7 +236,7 @@ export function markAllNotificationsRead() {
     return n;
   });
 
-  if (changed) emit();
+  if (changed) notify();
 }
 
 /* ------------------------------------------------------------------ */
@@ -243,7 +250,7 @@ export function removeNotification(notificationId: string) {
 
   NOTIFICATIONS = next;
 
-  emit();
+  notify();
 }
 
 /* ------------------------------------------------------------------ */
@@ -255,7 +262,7 @@ export function clearNotifications() {
 
   NOTIFICATIONS = [];
 
-  emit();
+  notify();
 }
 
 /* ------------------------------------------------------------------ */
@@ -301,6 +308,6 @@ export function applySocialNotificationNavigation(
 /* INTERNAL                                                           */
 /* ------------------------------------------------------------------ */
 
-function emit() {
+function notify() {
   listeners.forEach((l) => l());
 }

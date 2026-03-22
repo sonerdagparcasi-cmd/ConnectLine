@@ -27,7 +27,7 @@ let FOLLOWING: Record<string, boolean> = {
   u2: true,
 };
 
-let BLOCKED: Set<string> = new Set();
+const BLOCKED_USER_IDS = new Set<string>();
 let MUTED: Set<string> = new Set();
 
 let listeners: Array<() => void> = [];
@@ -243,7 +243,7 @@ export function getSuggestedUsers(limit = 5) {
   return users
     .filter((u) => u.userId !== CURRENT_USER_ID)
     .filter((u) => !FOLLOWING[u.userId])
-    .filter((u) => !BLOCKED.has(u.userId))
+    .filter((u) => !BLOCKED_USER_IDS.has(u.userId))
     .slice(0, limit);
 }
 
@@ -253,7 +253,7 @@ export function getSuggestedUsers(limit = 5) {
 
 export function blockUser(userId: string): void {
   if (userId === CURRENT_USER_ID) return;
-  BLOCKED.add(userId);
+  BLOCKED_USER_IDS.add(userId);
   const next = { ...FOLLOWING };
   delete next[userId];
   FOLLOWING = next;
@@ -262,16 +262,25 @@ export function blockUser(userId: string): void {
 }
 
 export function unblockUser(userId: string): void {
-  BLOCKED.delete(userId);
+  BLOCKED_USER_IDS.delete(userId);
   emit();
 }
 
 export function isBlocked(userId: string): boolean {
-  return BLOCKED.has(userId);
+  return BLOCKED_USER_IDS.has(resolveSocialUserId(userId));
+}
+
+/** ADIM 5 — engel kontrolü (me → current user çözülür) */
+export function isUserBlocked(userId: string): boolean {
+  return BLOCKED_USER_IDS.has(resolveSocialUserId(userId));
 }
 
 export function getBlockedIds(): string[] {
-  return Array.from(BLOCKED);
+  return Array.from(BLOCKED_USER_IDS);
+}
+
+export function getBlockedUserIds(): string[] {
+  return getBlockedIds();
 }
 
 /* ------------------------------------------------------------------ */

@@ -13,6 +13,8 @@ import {
   Alert,
   FlatList,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -21,6 +23,7 @@ import {
 } from "react-native";
 
 import type { RouteProp } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import { t } from "../../../shared/i18n/t";
 
@@ -36,14 +39,19 @@ import {
   toggleLike as toggleLikePost,
   toggleSavedPost,
 } from "../services/socialFeedStateService";
-import { addComment, getComments } from "../services/socialCommentService";
 import {
+  addComment,
+  getComments,
+  subscribeComments,
+} from "../services/socialCommentService";
+import {
+  blockUser,
   getCurrentSocialUserId,
-  isBlocked,
+  isUserBlocked,
   subscribeFollow,
 } from "../services/socialFollowService";
+import { REPORT_REASONS, reportPost } from "../services/socialReportService";
 
-import { SOCIAL_LIKE_ACTIVE_COLOR } from "../constants/socialInteraction";
 import type { SocialComment, SocialPost } from "../types/social.types";
 
 /* ------------------------------------------------------------------ */
@@ -53,6 +61,8 @@ import type { SocialComment, SocialPost } from "../types/social.types";
 type Route = RouteProp<SocialStackParamList, "SocialPostDetail">;
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
 
+/** Yorum çubuğu yüksekliği (padding + tek satır input) — liste alt boşluğu için */
+const COMMENT_INPUT_BAR_HEIGHT = 56;
 
 /* ------------------------------------------------------------------ */
 /* SCREEN                                                             */
@@ -60,6 +70,7 @@ type Nav = NativeStackNavigationProp<SocialStackParamList>;
 
 export default function SocialPostDetailScreen() {
   const T = useAppTheme();
+  const insets = useSafeAreaInsets();
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
 
@@ -71,26 +82,33 @@ export default function SocialPostDetailScreen() {
   const [comments, setComments] = useState<SocialComment[]>(() =>
     getComments(postId)
   );
-  const [input, setInput] = useState("");
+  const [commentText, setCommentText] = useState("");
   const inputRef = useRef<TextInput>(null);
+  const listRef = useRef<FlatList<SocialComment>>(null);
   /** Engelle / takip grafik güncellemelerinde yeniden çizim */
   const [, setGraphTick] = useState(0);
 
   useEffect(() => {
-    const sync = () => {
+    const syncPost = () => {
       setPost(getPostById(postId));
-      setComments(getComments(postId));
     };
-    sync();
-    const unsubFeed = subscribeFeed(sync);
+    syncPost();
+    const unsubFeed = subscribeFeed(syncPost);
     const unsubFollow = subscribeFollow(() => {
-      sync();
+      syncPost();
       setGraphTick((n) => n + 1);
     });
     return () => {
       unsubFeed();
       unsubFollow();
     };
+  }, [postId]);
+
+  useEffect(() => {
+    const unsub = subscribeComments(() => {
+      setComments(getComments(postId));
+    });
+    return unsub;
   }, [postId]);
 
   const saved = post ? isPostSaved(post.id) : false;
@@ -109,14 +127,6 @@ export default function SocialPostDetailScreen() {
     toggleSavedPost(post.id);
   }
 
-  function toggleCommentLike(id: string) {
-    setComments((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, likedByMe: !c.likedByMe } : c
-      )
-    );
-  }
-
   function openPostMenu() {
     Alert.alert(
       t("social.postDetail.title"),
@@ -124,15 +134,33 @@ export default function SocialPostDetailScreen() {
     );
   }
 
-  function openCommentMenu() {
+  function openReportPost() {
+    if (!post) return;
     Alert.alert(
-      t("social.postDetail.comment"),
-      `${t("social.feed.edit")} / ${t("social.feed.hide")} (UI-only)`
+      "Bildir",
+      undefined,
+      [
+        ...REPORT_REASONS.map((r) => ({
+          text: r.labelTr,
+          onPress: () => {
+            reportPost(post.id, r.value);
+            Alert.alert("", "Bildirimin alındı");
+          },
+        })),
+        { text: "İptal", style: "cancel" },
+      ]
     );
   }
 
+  function handleBlockAuthor() {
+    if (!post) return;
+    blockUser(post.userId);
+    Alert.alert("", "Kullanıcı engellendi");
+    navigation.goBack();
+  }
+
   function submitComment() {
-    if (!input.trim() || !post) return;
+    if (!commentText.trim() || !post) return;
     if ((post.settings?.commentsEnabled ?? post.settings?.comments) === false) {
       Alert.alert(t("social.notifications"), "Bu gönderide yorumlar kapalı.");
       return;
@@ -141,12 +169,11 @@ export default function SocialPostDetailScreen() {
       Alert.alert(t("social.notifications"), t("social.restricted"));
       return;
     }
-    addComment(post.id, {
-      userId: getCurrentSocialUserId(),
-      username: "Ben",
-      text: input.trim(),
+    addComment(post.id, commentText);
+    setCommentText("");
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
-    setInput("");
   }
 
   if (!post) {
@@ -163,7 +190,7 @@ export default function SocialPostDetailScreen() {
 
   const isOwner = post.userId === getCurrentSocialUserId();
 
-  if (!isOwner && isBlocked(post.userId)) {
+  if (!isOwner && isUserBlocked(post.userId)) {
     return (
       <SocialScreenLayout title={t("social.postDetail.title")}>
         <View style={styles.archivedBox}>
@@ -210,14 +237,23 @@ export default function SocialPostDetailScreen() {
     );
   }
 
-  const heartColor = liked ? SOCIAL_LIKE_ACTIVE_COLOR : T.textColor;
+  const likeColor = T.isDark ? "#1834ae" : "#00bfff";
+  const heartColor = liked ? likeColor : T.textColor;
   const canEdit = isOwner && !post.event;
 
-  const sendDisabled = !commentsOpen || !input.trim();
+  const sendDisabled = !commentsOpen || !commentText.trim();
+
+  const listBottomPad =
+    (commentsOpen ? COMMENT_INPUT_BAR_HEIGHT + 10 + insets.bottom : 0) + 100;
 
   return (
     <SocialScreenLayout title={t("social.postDetail.title")} scroll={false}>
-      <View style={styles.screenBody}>
+      <KeyboardAvoidingView
+        style={styles.kavRoot}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+      >
+        <View style={styles.screenBody}>
       {/* ================= POST HEADER ================= */}
 
       <View style={[styles.header, { borderBottomColor: T.border }]}>
@@ -312,16 +348,28 @@ export default function SocialPostDetailScreen() {
         </TouchableOpacity>
       </View>
 
+      {!isOwner ? (
+        <View style={[styles.modRow, { borderBottomColor: T.border }]}>
+          <TouchableOpacity onPress={openReportPost} hitSlop={8}>
+            <Text style={[styles.modLink, { color: T.mutedText }]}>Bildir</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleBlockAuthor} hitSlop={8}>
+            <Text style={[styles.modLink, { color: T.mutedText }]}>Engelle</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {/* ================= COMMENTS ================= */}
 
       <FlatList
+        ref={listRef}
         style={styles.commentList}
         data={comments}
         keyExtractor={(i) => i.id}
         contentContainerStyle={
           comments.length === 0
-            ? styles.commentListEmpty
-            : { paddingTop: 8, paddingBottom: 12 }
+            ? [styles.commentListEmpty, { paddingBottom: listBottomPad }]
+            : { paddingTop: 8, paddingBottom: listBottomPad }
         }
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
@@ -330,64 +378,19 @@ export default function SocialPostDetailScreen() {
           </Text>
         }
         renderItem={({ item }) => (
-          <View style={[styles.commentRow, { borderBottomColor: T.border }]}>
-            <View
-              style={[
-                styles.commentAvatar,
-                { backgroundColor: T.cardBg, borderColor: T.border },
-              ]}
-            >
-              <Ionicons name="person" size={14} color={T.textColor} />
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: T.textColor, fontWeight: "900" }}>
-                {item.username}
-              </Text>
-
-              <Text style={{ color: T.textColor, marginTop: 2 }}>
-                {item.text}
-              </Text>
-
-              <View style={styles.commentActions}>
-                <TouchableOpacity
-                  onPress={() => toggleCommentLike(item.id)}
-                  style={styles.commentActionBtn}
-                >
-                  <Ionicons
-                    name={item.likedByMe ? "heart" : "heart-outline"}
-                    size={14}
-                    color={item.likedByMe ? T.accent : T.mutedText}
-                  />
-
-                  <Text
-                    style={{
-                      marginLeft: 4,
-                      color: item.likedByMe ? T.accent : T.mutedText,
-                      fontWeight: "800",
-                      fontSize: 12,
-                    }}
-                  >
-                    {t("social.postDetail.like")}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={openCommentMenu}
-                  style={styles.commentActionBtn}
-                >
-                  <Text
-                    style={{
-                      color: T.mutedText,
-                      fontWeight: "800",
-                      fontSize: 12,
-                    }}
-                  >
-                    ⋯
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+          <View
+            style={[
+              styles.commentRow,
+              {
+                borderBottomWidth: StyleSheet.hairlineWidth,
+                borderBottomColor: T.border,
+              },
+            ]}
+          >
+            <Text style={{ color: T.textColor, fontWeight: "600" }}>
+              {item.username}
+            </Text>
+            <Text style={{ color: T.textColor, marginTop: 2 }}>{item.text}</Text>
           </View>
         )}
       />
@@ -395,54 +398,58 @@ export default function SocialPostDetailScreen() {
       {/* ================= COMMENT INPUT ================= */}
 
       {!commentsOpen ? (
-        <Text style={[styles.commentsClosedHint, { color: T.mutedText }]}>
-          Bu gönderide yorumlar kapalı.
+        <Text style={[styles.commentsClosedHint, { color: T.mutedText, opacity: 0.6 }]}>
+          Yorumlar kapalı
         </Text>
       ) : null}
 
-      <View
-        style={[
-          styles.commentInputRow,
-          {
-            borderTopColor: T.border,
-            borderBottomColor: T.border,
-            opacity: commentsOpen ? 1 : 0.55,
-          },
-        ]}
-      >
-        <TextInput
-          ref={inputRef}
-          value={input}
-          onChangeText={setInput}
-          editable={commentsOpen}
-          placeholder={
-            commentsOpen
-              ? t("social.postDetail.commentPlaceholder")
-              : "Yorumlar kapalı"
-          }
-          placeholderTextColor={T.mutedText}
+      {commentsOpen ? (
+        <View
           style={[
-            styles.input,
+            styles.commentInputBar,
             {
-              color: T.textColor,
               backgroundColor: T.cardBg,
+              borderTopColor: T.border,
+              paddingBottom: 10 + insets.bottom,
             },
           ]}
-        />
-
-        <TouchableOpacity
-          onPress={submitComment}
-          disabled={sendDisabled}
-          hitSlop={8}
         >
-          <Ionicons
-            name="send"
-            size={20}
-            color={sendDisabled ? T.mutedText : T.accent}
-          />
-        </TouchableOpacity>
-      </View>
-      </View>
+          <View style={styles.commentInputRowInner}>
+            <TextInput
+              ref={inputRef}
+              value={commentText}
+              onChangeText={setCommentText}
+              placeholder="Yorum yaz..."
+              placeholderTextColor={T.mutedText}
+              style={[
+                styles.input,
+                {
+                  color: T.textColor,
+                  backgroundColor: T.cardBg,
+                  padding: 10,
+                },
+              ]}
+            />
+
+            <TouchableOpacity
+              onPress={submitComment}
+              disabled={sendDisabled}
+              hitSlop={8}
+            >
+              <Text
+                style={{
+                  color: sendDisabled ? T.mutedText : T.accent,
+                  fontWeight: "700",
+                }}
+              >
+                Gönder
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+        </View>
+      </KeyboardAvoidingView>
     </SocialScreenLayout>
   );
 }
@@ -450,9 +457,14 @@ export default function SocialPostDetailScreen() {
 /* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
+  kavRoot: {
+    flex: 1,
+    minHeight: 0,
+  },
   screenBody: {
     flex: 1,
     minHeight: 0,
+    position: "relative",
   },
   commentList: {
     flex: 1,
@@ -503,13 +515,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  commentInputRow: {
+  modRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 22,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+
+  modLink: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  commentInputBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  commentInputRowInner: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
 
@@ -519,31 +550,9 @@ const styles = StyleSheet.create({
   },
 
   commentRow: {
-    flexDirection: "row",
-    gap: 10,
+    marginBottom: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-
-  commentAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  commentActions: {
-    flexDirection: "row",
-    gap: 16,
-    marginTop: 6,
-  },
-
-  commentActionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
+    paddingBottom: 10,
   },
 
   archivedBox: {

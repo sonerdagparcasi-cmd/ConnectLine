@@ -874,7 +874,7 @@ export default function SocialCreatePostScreen() {
 
   return (
     <View style={styles.screenRoot}>
-      <SocialScreenLayout title="Paylaşım Oluştur" scroll>
+      <SocialScreenLayout title="Paylaşım Oluştur" scroll showNotificationBell={false}>
         <View style={{ paddingBottom: 40, backgroundColor: T.backgroundColor }}>
           <TextInput
             value={caption}

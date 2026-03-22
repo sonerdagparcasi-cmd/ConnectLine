@@ -12,18 +12,17 @@ import type { SocialComment, SocialPost, SocialPostShareSettings } from "../type
 import {
   getCurrentSocialUserId,
   getSocialDisplayName,
-  getFollowingIds,
-  isBlocked,
   isMuted,
+  isUserBlocked,
 } from "./socialFollowService";
 
 /** Engellenen / sessize alınan yazarların gönderileri (feed, keşfet, kayıtlı vb.) */
 function filterBlockedAndMutedAuthors(posts: SocialPost[]): SocialPost[] {
-  return posts.filter((p) => !isBlocked(p.userId) && !isMuted(p.userId));
+  return posts.filter((p) => !isUserBlocked(p.userId) && !isMuted(p.userId));
 }
 import { notifyPostCommented, notifyPostLiked } from "./socialNotificationService";
 import { socialEventService } from "./socialEventService";
-import { getFeedPosts as getBaseFeedPosts, rankFeedPosts } from "./socialFeedService";
+import { getFeedPosts as getBaseFeedPosts } from "./socialFeedService";
 
 /* ------------------------------------------------------------------ */
 /* INTERNAL STORE                                                     */
@@ -143,7 +142,11 @@ export function getAllPosts(): SocialPost[] {
 }
 
 export function getPostById(postId: string): SocialPost | undefined {
-  return POST_MAP[postId];
+  const p = POST_MAP[postId];
+  if (!p) return undefined;
+  const me = getCurrentSocialUserId();
+  if (p.userId !== me && isUserBlocked(p.userId)) return undefined;
+  return p;
 }
 
 /** Liste görünümleri: arşivlenmiş gönderileri dışla */
@@ -172,9 +175,12 @@ function mergeSettings(
 export function getFeedPosts(): SocialPost[] {
   const posts = filterPublished(getAllPosts());
   const filtered = posts.filter(
-    (p) => !isBlocked(p.userId) && !isMuted(p.userId)
+    (p) => !isUserBlocked(p.userId) && !isMuted(p.userId)
   );
-  return rankFeedPosts(filtered, getFollowingIds(), getCurrentSocialUserId());
+  return [...filtered].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -211,18 +217,17 @@ export function recordCommentAdded(postId: string): void {
 /* ------------------------------------------------------------------ */
 
 export function getPostsByUser(userId: string): SocialPost[] {
+  const me = getCurrentSocialUserId();
+  if (userId !== me && isUserBlocked(userId)) return [];
   return filterPublished(
     POST_ORDER.map((id) => POST_MAP[id]).filter((p) => p.userId === userId)
   );
 }
 
 /**
- * Mevcut kullanıcı başka birini engellediyse o profilde içerik gösterilmez.
- * Kendi profili her zaman tam listelenir.
+ * Profil grid / sayıları; engellenen profillerde boş liste (getPostsByUser ile aynı kural).
  */
 export function getProfilePostsVisibleToCurrentUser(profileUserId: string): SocialPost[] {
-  const me = getCurrentSocialUserId();
-  if (profileUserId !== me && isBlocked(profileUserId)) return [];
   return getPostsByUser(profileUserId);
 }
 
@@ -334,6 +339,7 @@ export function loadMoreFeedPosts() {
 /* ADD POST                                                           */
 /* ------------------------------------------------------------------ */
 
+/** Yeni gönderi her zaman feed tepesinde (unshift; push kullanılmaz). */
 export function addFeedPost(post: SocialPost) {
   if (POST_MAP[post.id]) return;
 
@@ -482,6 +488,11 @@ export function toggleLike(postId: string): void {
   }
 }
 
+/** `toggleLike` ile aynı — API uyumluluğu (interaction core). Beğeni bildirimi `toggleLike` içinde `notifyPostLiked`. */
+export function toggleLikePost(postId: string): void {
+  toggleLike(postId);
+}
+
 /* ------------------------------------------------------------------ */
 /* COMMENTS (single source)                                           */
 /* ------------------------------------------------------------------ */
@@ -560,7 +571,7 @@ export function toggleSavePost(postId: string) {
   } else {
     SAVED_POST_IDS.add(postId);
   }
-  emit();
+  notifyFeedSubscribers();
 }
 
 export function isPostSaved(postId: string): boolean {
@@ -570,7 +581,9 @@ export function isPostSaved(postId: string): boolean {
 export function getSavedPosts(): SocialPost[] {
   return filterBlockedAndMutedAuthors(
     filterPublished(
-      POST_ORDER.map((id) => POST_MAP[id]).filter((p) => SAVED_POST_IDS.has(p.id))
+      POST_ORDER.map((id) => POST_MAP[id]).filter(
+        (p) => SAVED_POST_IDS.has(p.id) && !p.archived
+      )
     )
   );
 }
@@ -604,4 +617,9 @@ function invalidateCache() {
 
 function emit() {
   listeners.forEach((l) => l());
+}
+
+/** Kayıt / beğeni / feed listesi değişimlerinde UI aboneleri. */
+export function notifyFeedSubscribers() {
+  emit();
 }

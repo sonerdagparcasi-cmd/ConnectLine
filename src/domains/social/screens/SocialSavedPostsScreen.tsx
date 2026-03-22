@@ -24,6 +24,7 @@ import {
   toggleLike,
   toggleSavedPost,
 } from "../services/socialFeedStateService";
+import { subscribeFollow } from "../services/socialFollowService";
 
 import type { SocialPost } from "../types/social.types";
 
@@ -44,13 +45,14 @@ export default function SocialSavedPostsScreen() {
   /* ------------------------------------------------------------------ */
 
   useEffect(() => {
-    setPosts(getSavedPosts());
-
-    const unsubscribe = subscribeFeed(() => {
-      setPosts(getSavedPosts());
-    });
-
-    return unsubscribe;
+    const sync = () => setPosts(getSavedPosts());
+    sync();
+    const u1 = subscribeFeed(sync);
+    const u2 = subscribeFollow(sync);
+    return () => {
+      u1();
+      u2();
+    };
   }, []);
 
   /* ------------------------------------------------------------------ */

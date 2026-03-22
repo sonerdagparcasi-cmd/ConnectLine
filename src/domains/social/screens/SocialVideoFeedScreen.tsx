@@ -19,8 +19,6 @@ import { useAppTheme } from "../../../shared/theme/appTheme";
 import { t } from "../../../shared/i18n/t";
 
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
-import { SOCIAL_LIKE_ACTIVE_COLOR } from "../constants/socialInteraction";
-
 import {
   getTrendingVideos,
   subscribeFeed,
@@ -77,6 +75,7 @@ export default function SocialVideoFeedScreen() {
     const media = item.media?.[0];
     const isVideo = media?.type === "video";
     const isActive = index === currentIndex;
+    const likeColor = T.isDark ? "#1834ae" : "#00bfff";
 
     return (
       <View style={styles.item}>
@@ -135,10 +134,19 @@ export default function SocialVideoFeedScreen() {
                 <Ionicons
                   name={item.likedByMe ? "heart" : "heart-outline"}
                   size={24}
-                  color={item.likedByMe ? SOCIAL_LIKE_ACTIVE_COLOR : T.cardBg}
+                  color={item.likedByMe ? likeColor : T.textColor}
                 />
               </View>
-              <Text style={styles.actionLabel}>{String(item.likeCount ?? 0)}</Text>
+              <Text
+                style={[
+                  styles.actionLabel,
+                  {
+                    color: item.likedByMe ? likeColor : T.textColor,
+                  },
+                ]}
+              >
+                {String(item.likeCount ?? 0)}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => openPost(item.id)}

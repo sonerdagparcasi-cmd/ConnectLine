@@ -17,6 +17,7 @@ type Props = {
   showBack?: boolean;
   scroll?: boolean;
   right?: ReactNode;
+  showNotificationBell?: boolean;
 };
 
 export default function SocialScreenLayout({
@@ -25,6 +26,7 @@ export default function SocialScreenLayout({
   showBack = true,
   scroll = true,
   right,
+  showNotificationBell = true,
 }: Props) {
   const T = useAppTheme();
 
@@ -39,7 +41,12 @@ export default function SocialScreenLayout({
       edges={["left", "right"]}
     >
       {/* HEADER */}
-      <SocialHeader title={title} showBack={showBack} right={right} />
+      <SocialHeader
+        title={title}
+        showBack={showBack}
+        right={right}
+        showNotificationBell={showNotificationBell}
+      />
 
       {/* CONTENT */}
       {scroll ? (

@@ -44,7 +44,7 @@ function sortByDate(posts: SocialPost[]): SocialPost[] {
 /* ------------------------------------------------------------------ */
 
 function calculateTrendScore(post: SocialPost): number {
-  const likeScore = post.likeCount * 3;
+  const likeScore = (post.likeCount ?? 0) * 3;
   const commentScore = post.commentCount * 5;
 
   const postTime = new Date(post.createdAt).getTime();

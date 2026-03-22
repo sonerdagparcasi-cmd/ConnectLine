@@ -48,9 +48,9 @@ export type SocialComment = {
 
 /** Paylaşım oluştur ekranından gelen görünürlük / etkileşim tercihleri */
 export type SocialPostShareSettings = {
-  comments: boolean;
-  likesVisible: boolean;
-  /** İsteğe bağlı eş anlamlı (comments ile senkron tutulur) */
+  /** Legacy; `commentsEnabled` ile birlikte kullanılır */
+  comments?: boolean;
+  likesVisible?: boolean;
   commentsEnabled?: boolean;
 };
 
@@ -60,6 +60,8 @@ export type SocialPost = {
   userId: string;
   username: string;
   userAvatarUri?: string | null;
+  /** Onaylı hesap rozeti (Reels / profil) */
+  verified?: boolean;
 
   media: SocialMediaItem[]; // 🔒 her zaman array
   /** Kapak görseli bu indeksteki medyadır (yoksa 0) */
@@ -71,10 +73,10 @@ export type SocialPost = {
   visibility: SocialVisibility;
   createdAt: string;
 
-  /** Toplam beğeni sayısı (servis: `toggleLike` ile güncellenir) */
-  likeCount: number;
+  /** Toplam beğeni sayısı (servis: `toggleLike` / `toggleLikePost`) */
+  likeCount?: number;
   /** Mevcut kullanıcı bu gönderiyi beğendi mi */
-  likedByMe: boolean;
+  likedByMe?: boolean;
 
   commentCount: number;
   commentsPreview?: SocialComment[];
@@ -241,8 +243,13 @@ export type SocialNotificationType =
 /* REPORT (FAZ 2)                                                             */
 /* -------------------------------------------------------------------------- */
 
+/** Gönderi / kullanıcı bildirimi (FAZ 5 — ADIM 5 + geriye dönük değerler) */
 export type SocialReportReason =
   | "spam"
+  | "rahatsiz_edici"
+  | "uygunsuz"
+  | "sahte_hesap"
+  | "diger"
   | "fake_account"
   | "abuse"
   | "violence"
@@ -259,9 +266,13 @@ export type SocialNotification = {
   actorUsername: string;
   actorAvatarUri?: string | null;
 
+  /** Bildirimin hedef kullanıcısı (ör. gönderi sahibi, takip edilen) */
   targetUserId: string;
 
+  /** Gönderiyle ilişkili bildirimler */
   postId?: string;
+  /** `postId` ile aynı anlam (ADIM 4 uyumluluğu) */
+  targetPostId?: string;
   storyId?: string;
   eventId?: string;
 
