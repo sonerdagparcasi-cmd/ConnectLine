@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { ResizeMode, Video } from "expo-av";
+import { LinearGradient } from "expo-linear-gradient";
+import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
@@ -8,16 +10,9 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Reanimated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import Reanimated from "react-native-reanimated";
 
 import type { RouteProp } from "@react-navigation/native";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
@@ -37,8 +32,6 @@ export default function SocialMediaViewerScreen({ route }: Props) {
   const [showUI, setShowUI] = useState(true);
   const [muted, setMuted] = useState(true);
   const listRef = useRef<FlatList<SocialMediaItem> | null>(null);
-  const translateY = useSharedValue(0);
-  const scale = useSharedValue(1);
 
   useEffect(() => {
     if (!showUI) return;
@@ -48,47 +41,14 @@ export default function SocialMediaViewerScreen({ route }: Props) {
     return () => clearTimeout(t);
   }, [showUI]);
 
-  function toggleUI() {
-    setShowUI((p) => !p);
-  }
-
-  function closeViewer() {
-    navigation.goBack();
-  }
-
-  const pinch = Gesture.Pinch()
-    .enabled(media[activeIndex]?.type === "image")
-    .onUpdate((e) => {
-      scale.value = Math.max(1, e.scale);
-    })
-    .onEnd(() => {
-      scale.value = withTiming(1);
-    });
-
-  const pan = Gesture.Pan()
-    .onUpdate((e) => {
-      translateY.value = e.translationY;
-    })
-    .onEnd((e) => {
-      if (e.translationY > 150) {
-        runOnJS(closeViewer)();
-      } else {
-        translateY.value = withTiming(0);
-      }
-    });
-
-  const composed = Gesture.Simultaneous(pinch, pan);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }, { scale: scale.value }],
-  }));
-
   return (
     <View style={styles.container}>
+      <StatusBar hidden />
       <FlatList
         ref={listRef}
         data={media}
         horizontal
+        scrollEnabled={true}
         pagingEnabled
         initialScrollIndex={safeStartIndex}
         showsHorizontalScrollIndicator={false}
@@ -104,36 +64,34 @@ export default function SocialMediaViewerScreen({ route }: Props) {
         }}
         renderItem={({ item, index }) => (
           <View style={styles.page}>
-            <GestureDetector gesture={composed}>
-              <Reanimated.View style={[styles.mediaWrap, animStyle]}>
-                <TouchableWithoutFeedback onPress={toggleUI}>
-                  <View style={styles.touchLayer}>
-                    {item.type === "video" ? (
-                      <Video
-                        source={{ uri: item.uri }}
-                        style={styles.media}
-                        resizeMode={ResizeMode.CONTAIN}
-                        shouldPlay={index === activeIndex}
-                        isLooping
-                        isMuted={muted}
-                      />
-                    ) : (
-                      <Reanimated.Image source={{ uri: item.uri }} style={styles.media} resizeMode="contain" />
-                    )}
-                  </View>
-                </TouchableWithoutFeedback>
-              </Reanimated.View>
-            </GestureDetector>
+            <View style={styles.mediaWrap}>
+              {item.type === "video" ? (
+                <Video
+                  source={{ uri: item.uri }}
+                  style={styles.media}
+                  resizeMode={ResizeMode.COVER}
+                  shouldPlay={index === activeIndex}
+                  isLooping
+                  isMuted={true}
+                />
+              ) : (
+                <Reanimated.Image source={{ uri: item.uri }} style={styles.media} resizeMode="cover" />
+              )}
+            </View>
           </View>
         )}
       />
-      {showUI ? (
-        <View style={styles.indexIndicator}>
-          <Text style={styles.indexText}>
-            {activeIndex + 1} / {media.length}
-          </Text>
-        </View>
-      ) : null}
+      <View style={styles.topGradientWrap}>
+        <LinearGradient
+          colors={["rgba(0,0,0,0.7)", "rgba(0,0,0,0)"]}
+          style={styles.topGradient}
+        />
+      </View>
+      <View style={styles.indexIndicator}>
+        <Text style={styles.indexText}>
+          {activeIndex + 1} / {media.length}
+        </Text>
+      </View>
       {showUI && media[activeIndex]?.type === "video" ? (
         <TouchableOpacity
           onPress={() => setMuted((p) => !p)}
@@ -157,26 +115,37 @@ const styles = StyleSheet.create({
     height,
   },
   mediaWrap: {
-    flex: 1,
-  },
-  touchLayer: {
-    flex: 1,
+    width,
+    height,
   },
   media: {
-    width: "100%",
-    height: "100%",
+    width,
+    height,
   },
   indexIndicator: {
     position: "absolute",
-    top: 40,
+    top: 60,
     alignSelf: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    zIndex: 10,
+    elevation: 10,
+  },
+  topGradientWrap: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9,
+    elevation: 9,
+  },
+  topGradient: {
+    width: "100%",
+    height: 120,
   },
   indexText: {
     color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 1,
   },
   soundButton: {
     position: "absolute",
