@@ -16,6 +16,7 @@ const translations: Record<Lang, Record<string, string>> = {
     login: "Giriş Yap",
     show: "Göster",
     hide: "Gizle",
+    "common.ok": "Tamam",
 
     /* Corporate Tabs */
     "corporate.tab.home": "Home",
@@ -34,6 +35,68 @@ const translations: Record<Lang, Record<string, string>> = {
     "corporate.feed.share.copy": "Bağlantıyı Kopyala",
     "corporate.feed.share.inbox": "Gelen Kutusuna Gönder",
     "corporate.feed.share.external": "Harici Paylaş",
+    "corporate.feed.save": "Kaydet",
+    "corporate.feed.empty": "Bu kurum henüz paylaşım yapmamış.",
+    "corporate.feed.visitorBlocked":
+      "Bu kurum paylaşımlarını yalnızca sınırlı kişilerle paylaşıyor.",
+    "corporate.feed.hint.likeRestricted": "Bu paylaşım herkese açık değil.",
+    "corporate.feed.hint.commentRestricted":
+      "Yorum yapmak için profil herkese açık olmalı.",
+    "corporate.feed.hint.shareRestricted": "Bu paylaşım paylaşıma kapalı.",
+
+    "corporate.post.badge.announcement": "Duyuru",
+    "corporate.post.badge.hiring": "İşe alım",
+    "corporate.post.menu.edit": "Düzenle",
+    "corporate.post.menu.delete": "Sil",
+    "corporate.post.menu.commentsOff": "Yorumları kapat",
+    "corporate.post.menu.commentsOn": "Yorumları aç",
+    "corporate.post.menu.hideLikes": "Beğeni sayısını gizle",
+    "corporate.post.menu.showLikes": "Beğeni sayısını göster",
+
+    "corporate.postDetail.title": "Paylaşım",
+    "corporate.postDetail.likes": "beğeni",
+
+    "corporate.comments.disabledTitle": "Yorumlar kapalı",
+    "corporate.comments.disabledBody":
+      "Bu paylaşım için yorumlar devre dışı bırakıldı.",
+    "corporate.comments.authorNetwork": "Ağ",
+    "corporate.comments.you": "Siz",
+    "corporate.comments.deleteA11y": "Yorumu sil",
+
+    "corporate.badge.a11y": "Kurumsal okunmamış bildirimler",
+
+    "corporate.notification.like.title": "Yeni beğeni",
+    "corporate.notification.like.body": "Bir paylaşımınız beğenildi.",
+    "corporate.notification.comment.title": "Yeni yorum",
+    "corporate.notification.comment.body": "Bir paylaşımınıza yorum yapıldı.",
+    "corporate.notification.follow.title": "Yeni takip",
+    "corporate.notification.follow.body": "Şirket sayfanız takip edildi.",
+
+    "corporate.notifications.title": "Bildirimler",
+    "corporate.notifications.empty": "Henüz bildirim yok.",
+    "corporate.notifications.markAllRead": "Tümünü okundu işaretle",
+
+    "corporate.editor.title": "Paylaşım hazırla",
+    "corporate.editor.editTitle": "Paylaşımı düzenle",
+    "corporate.editor.error": "Hata",
+    "corporate.editor.missingPost": "Paylaşım bulunamadı.",
+    "corporate.editor.caption": "Açıklama",
+    "corporate.editor.captionPlaceholder": "Profesyonel bir açıklama yazın…",
+    "corporate.editor.publish": "Yayınla",
+    "corporate.editor.pickMedia": "Medya ekle",
+    "corporate.editor.previewEmpty": "Önizleme için medya ekleyin",
+    "corporate.editor.tool.text": "Yazı",
+    "corporate.editor.tool.tag": "Etiket",
+    "corporate.editor.tool.settings": "Ayarlar",
+    "corporate.editor.addText": "Metin ekle",
+    "corporate.editor.addTag": "Etiket",
+    "corporate.editor.visibility": "Görünürlük",
+    "corporate.editor.visibility.public": "Herkese açık",
+    "corporate.editor.visibility.network": "Yalnızca ağ",
+    "corporate.editor.toggle.comments": "Yorumlara izin ver",
+    "corporate.editor.toggle.likeCount": "Beğeni sayısını göster",
+    "corporate.editor.toggle.announcement": "Duyuru olarak işaretle",
+    "corporate.editor.toggle.hiring": "İşe alım vurgusu",
 
     /* Corporate Home */
     "corporate.home.title": "Kurumsal",
@@ -515,6 +578,7 @@ const translations: Record<Lang, Record<string, string>> = {
     login: "Login",
     show: "Show",
     hide: "Hide",
+    "common.ok": "OK",
 
     /* Corporate Tabs */
     "corporate.tab.home": "Home",
@@ -533,6 +597,68 @@ const translations: Record<Lang, Record<string, string>> = {
     "corporate.feed.share.copy": "Copy link",
     "corporate.feed.share.inbox": "Send to inbox",
     "corporate.feed.share.external": "External share",
+    "corporate.feed.save": "Save",
+    "corporate.feed.empty": "This organization has not shared anything yet.",
+    "corporate.feed.visitorBlocked":
+      "This organization only shares updates with a limited audience.",
+    "corporate.feed.hint.likeRestricted": "This post is not public.",
+    "corporate.feed.hint.commentRestricted":
+      "Comments require a public profile.",
+    "corporate.feed.hint.shareRestricted": "Sharing is disabled for this post.",
+
+    "corporate.post.badge.announcement": "Announcement",
+    "corporate.post.badge.hiring": "Hiring",
+    "corporate.post.menu.edit": "Edit",
+    "corporate.post.menu.delete": "Delete",
+    "corporate.post.menu.commentsOff": "Turn off comments",
+    "corporate.post.menu.commentsOn": "Turn on comments",
+    "corporate.post.menu.hideLikes": "Hide like count",
+    "corporate.post.menu.showLikes": "Show like count",
+
+    "corporate.postDetail.title": "Post",
+    "corporate.postDetail.likes": "likes",
+
+    "corporate.comments.disabledTitle": "Comments are off",
+    "corporate.comments.disabledBody":
+      "Comments have been disabled for this post.",
+    "corporate.comments.authorNetwork": "Network",
+    "corporate.comments.you": "You",
+    "corporate.comments.deleteA11y": "Delete comment",
+
+    "corporate.badge.a11y": "Unread corporate notifications",
+
+    "corporate.notification.like.title": "New like",
+    "corporate.notification.like.body": "Someone liked your post.",
+    "corporate.notification.comment.title": "New comment",
+    "corporate.notification.comment.body": "Someone commented on your post.",
+    "corporate.notification.follow.title": "New follower",
+    "corporate.notification.follow.body": "Your company page was followed.",
+
+    "corporate.notifications.title": "Notifications",
+    "corporate.notifications.empty": "No notifications yet.",
+    "corporate.notifications.markAllRead": "Mark all as read",
+
+    "corporate.editor.title": "Create post",
+    "corporate.editor.editTitle": "Edit post",
+    "corporate.editor.error": "Error",
+    "corporate.editor.missingPost": "Post could not be found.",
+    "corporate.editor.caption": "Caption",
+    "corporate.editor.captionPlaceholder": "Write a professional caption…",
+    "corporate.editor.publish": "Publish",
+    "corporate.editor.pickMedia": "Add media",
+    "corporate.editor.previewEmpty": "Add media for preview",
+    "corporate.editor.tool.text": "Text",
+    "corporate.editor.tool.tag": "Tag",
+    "corporate.editor.tool.settings": "Settings",
+    "corporate.editor.addText": "Add text",
+    "corporate.editor.addTag": "Tag label",
+    "corporate.editor.visibility": "Visibility",
+    "corporate.editor.visibility.public": "Public",
+    "corporate.editor.visibility.network": "Network only",
+    "corporate.editor.toggle.comments": "Allow comments",
+    "corporate.editor.toggle.likeCount": "Show like count",
+    "corporate.editor.toggle.announcement": "Mark as announcement",
+    "corporate.editor.toggle.hiring": "Hiring highlight",
 
     /* Corporate Home */
     "corporate.home.title": "Corporate",

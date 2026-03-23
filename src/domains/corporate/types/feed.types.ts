@@ -8,54 +8,57 @@
 export type CorporateMediaType = "image" | "video";
 
 /**
- * 🔒 ADIM 6 – TEK VE GERÇEK MEDYA TİPİ
- *
- * Kurallar:
- * - Feed, PostDetail ve MediaPreview aynı tipi kullanır
- * - Media her zaman ARRAY içinde taşınır
- * - order sıralama içindir (carousel)
+ * 🔒 TEK MEDYA TİPİ — Feed, PostDetail, MediaPreview, fullscreen
  */
 export type CorporateMediaItem = {
   id: string;
   type: CorporateMediaType;
   uri: string;
   order: number;
+  width?: number;
+  height?: number;
+  thumbnailUri?: string;
+  /** video süresi (ms) */
+  durationMs?: number;
+};
+
+export type CorporateOverlay = {
+  id: string;
+  type: "text" | "tag";
+  /** 0..1 relative X */
+  x: number;
+  /** 0..1 relative Y */
+  y: number;
+  value: string;
+  style?: {
+    color?: string;
+    fontSize?: number;
+    fontWeight?: string;
+  };
 };
 
 /* ------------------------------------------------------------------ */
-/* FEED POST                                                          */
+/* FEED POST — canonical (corporateFeedStateService)                  */
 /* ------------------------------------------------------------------ */
 
-/**
- * 🔒 CorporateFeedPost (KİLİTLİ)
- *
- * Kurallar:
- * - Feed state'in tek kaynağı
- * - Route’a DIRECT taşınabilir
- * - media her zaman CorporateMediaItem[]
- * - text alanı SADECE feed içeriğidir
- */
-export type CorporateFeedPost = {
+export type CorporatePost = {
   id: string;
   companyId: string;
-
-  /** Paylaşım metni */
-  text: string;
-
-  /**
-   * 🔒 ADIM 6
-   * - Her zaman ARRAY
-   * - Tek medya bile olsa array
-   * - Medya yoksa [] gönderilir
-   */
   media: CorporateMediaItem[];
-
-  /** Beğeni sayısı */
+  overlays?: CorporateOverlay[];
+  caption: string;
+  visibility: "public" | "network";
   likeCount: number;
-
-  /** Kullanıcı beğendi mi */
-  liked: boolean;
-
-  /** ISO date string */
-  createdAt: string;
+  likedByMe: boolean;
+  commentCount: number;
+  createdAt: number;
+  isAnnouncement?: boolean;
+  isHiring?: boolean;
+  commentsDisabled?: boolean;
+  likeCountHidden?: boolean;
 };
+
+/**
+ * Legacy isim — CorporatePost ile aynı (feed bileşenleri uyumu)
+ */
+export type CorporateFeedPost = CorporatePost;

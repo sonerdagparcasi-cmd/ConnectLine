@@ -22,6 +22,14 @@ type Props = {
   onComment: () => void;
   onShare: () => void;
 
+  /** Post sahibi beğeni sayısını gizleyebilir */
+  likeCountHidden?: boolean;
+
+  /** Kaydet (opsiyonel) */
+  showSave?: boolean;
+  saved?: boolean;
+  onSave?: () => void;
+
   /** Enforcement flags */
   canLike?: boolean;
   canComment?: boolean;
@@ -41,6 +49,10 @@ export default function FeedReactionBar({
   onLike,
   onComment,
   onShare,
+  likeCountHidden = false,
+  showSave = false,
+  saved = false,
+  onSave,
   canLike = true,
   canComment = true,
   canShare = true,
@@ -92,7 +104,10 @@ export default function FeedReactionBar({
       <View
         style={{
           flexDirection: "row",
+          alignItems: "center",
           justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
         }}
       >
         {/* LIKE */}
@@ -105,6 +120,7 @@ export default function FeedReactionBar({
             alignItems: "center",
             gap: 6,
             opacity: canLike ? 1 : 0.45,
+            minWidth: 56,
           }}
         >
           <Ionicons
@@ -113,14 +129,16 @@ export default function FeedReactionBar({
             color={liked && canLike ? T.accent : T.mutedText}
           />
 
-          <Text
-            style={{
-              color: liked && canLike ? T.accent : T.mutedText,
-              fontWeight: "800",
-            }}
-          >
-            {safeLikes}
-          </Text>
+          {!likeCountHidden ? (
+            <Text
+              style={{
+                color: liked && canLike ? T.accent : T.mutedText,
+                fontWeight: "800",
+              }}
+            >
+              {safeLikes}
+            </Text>
+          ) : null}
 
           {renderDisabledHint(canLike, likeHint)}
         </Pressable>
@@ -135,6 +153,7 @@ export default function FeedReactionBar({
             alignItems: "center",
             gap: 6,
             opacity: canComment ? 1 : 0.45,
+            minWidth: 56,
           }}
         >
           <Ionicons
@@ -155,6 +174,32 @@ export default function FeedReactionBar({
           {renderDisabledHint(canComment, commentHint)}
         </Pressable>
 
+        {showSave ? (
+          <Pressable
+            onPress={onSave}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              minWidth: 56,
+            }}
+          >
+            <Ionicons
+              name={saved ? "bookmark" : "bookmark-outline"}
+              size={18}
+              color={saved ? T.accent : T.mutedText}
+            />
+            <Text
+              style={{
+                color: saved ? T.accent : T.mutedText,
+                fontWeight: "800",
+              }}
+            >
+              {t("corporate.feed.save")}
+            </Text>
+          </Pressable>
+        ) : null}
+
         {/* SHARE */}
 
         <Pressable
@@ -165,6 +210,7 @@ export default function FeedReactionBar({
             alignItems: "center",
             gap: 6,
             opacity: canShare ? 1 : 0.45,
+            minWidth: 72,
           }}
         >
           <Ionicons

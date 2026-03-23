@@ -1,70 +1,56 @@
 // src/domains/corporate/hooks/useCorporateFeed.ts
 
 import { useCallback, useEffect, useState } from "react";
-import { corporateFeedService } from "../services/corporateFeedService";
-import { CorporateFeedPost } from "../types/feed.types";
+import {
+  addCorporatePost,
+  getCompanyPosts,
+  hydrateCorporateFeedForCompany,
+  subscribeCorporateFeed,
+  toggleLike,
+} from "../services/corporateFeedStateService";
+import type { CorporatePost } from "../types/feed.types";
 
 /**
- * 🔒 CORPORATE FEED HOOK
- *
- * ADIM 11:
- * - Screen saf UI
- *
- * ADIM 12:
- * - Optimistic + sync tamamen service’te
- * - Hook sadece state bağlar
- * - API DEĞİŞMEZ
+ * 🔒 CORPORATE FEED HOOK — tek kaynak: corporateFeedStateService
  */
 
 export function useCorporateFeed(companyId: string) {
-  const [posts, setPosts] = useState<CorporateFeedPost[]>([]);
+  const [posts, setPosts] = useState<CorporatePost[]>([]);
   const [loading, setLoading] = useState(true);
 
-  /* -------------------------------------------------------------- */
-  /* INITIAL FETCH                                                  */
-  /* -------------------------------------------------------------- */
   useEffect(() => {
     let mounted = true;
 
-    setLoading(true);
-
-    corporateFeedService.getFeed(companyId).then((data) => {
+    (async () => {
+      setLoading(true);
+      await hydrateCorporateFeedForCompany(companyId);
       if (!mounted) return;
-      setPosts(data);
+      setPosts(getCompanyPosts(companyId));
       setLoading(false);
+    })();
+
+    const unsub = subscribeCorporateFeed(() => {
+      setPosts(getCompanyPosts(companyId));
     });
 
     return () => {
       mounted = false;
+      unsub();
     };
   }, [companyId]);
 
-  /* -------------------------------------------------------------- */
-  /* LIKE                                                           */
-  /* -------------------------------------------------------------- */
-  const toggleLike = useCallback(async (postId: string) => {
-    await corporateFeedService.toggleLike(postId);
+  const onToggleLike = useCallback((postId: string) => {
+    toggleLike(postId);
+  }, []);
 
-    // service authoritative → yeniden oku
-    const updated = await corporateFeedService.getFeed(companyId);
-    setPosts(updated);
-  }, [companyId]);
-
-  /* -------------------------------------------------------------- */
-  /* ADD POST                                                       */
-  /* -------------------------------------------------------------- */
-  const addPost = useCallback(async (post: CorporateFeedPost) => {
-    await corporateFeedService.addPost(post);
-
-    // optimistic zaten service’te → local refresh
-    const updated = await corporateFeedService.getFeed(companyId);
-    setPosts(updated);
-  }, [companyId]);
+  const addPost = useCallback((post: CorporatePost) => {
+    addCorporatePost(post);
+  }, []);
 
   return {
     posts,
     loading,
-    toggleLike,
+    toggleLike: onToggleLike,
     addPost,
   };
 }

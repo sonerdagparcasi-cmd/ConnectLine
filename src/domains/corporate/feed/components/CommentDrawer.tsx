@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 
+import { t } from "../../../../shared/i18n/t";
 import { useAppTheme } from "../../../../shared/theme/appTheme";
 
 /* ------------------------------------------------------------------ */
@@ -26,6 +27,7 @@ export type DrawerComment = {
   author: string;
   body: string;
   createdAt: string;
+  canDelete?: boolean;
   media?: {
     type: "image" | "video";
     uri: string;
@@ -42,6 +44,9 @@ type Props = {
   comments: DrawerComment[];
   onClose: () => void;
   onAdd: (text: string) => void;
+  inputDisabled?: boolean;
+  inputDisabledMessage?: string;
+  onDeleteComment?: (commentId: string) => void;
 };
 
 /**
@@ -71,6 +76,9 @@ export default function CommentDrawer({
   comments,
   onClose,
   onAdd,
+  inputDisabled = false,
+  inputDisabledMessage,
+  onDeleteComment,
 }: Props) {
   const T = useAppTheme();
 
@@ -171,6 +179,7 @@ export default function CommentDrawer({
   /* ------------------------------------------------------------------ */
 
   function submit() {
+    if (inputDisabled) return;
     const value = text.trim();
     if (!value) return;
 
@@ -212,7 +221,7 @@ export default function CommentDrawer({
         {/* HEADER */}
         <View style={[styles.header, { borderBottomColor: T.border }]}>
           <Text style={{ color: T.textColor, fontWeight: "900" }}>
-            Yorumlar
+            {t("corporate.feed.comments")}
           </Text>
           <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
             <Ionicons name="close" size={22} color={T.mutedText} />
@@ -248,16 +257,27 @@ export default function CommentDrawer({
                       {c.author}
                     </Text>
 
-                    <TouchableOpacity
-                      onPress={() => togglePin(c.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name={isPinned ? "pin" : "pin-outline"}
-                        size={14}
-                        color={isPinned ? T.accent : T.mutedText}
-                      />
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      {c.canDelete && onDeleteComment ? (
+                        <TouchableOpacity
+                          onPress={() => onDeleteComment(c.id)}
+                          hitSlop={6}
+                          accessibilityLabel={t("corporate.comments.deleteA11y")}
+                        >
+                          <Ionicons name="trash-outline" size={16} color={T.mutedText} />
+                        </TouchableOpacity>
+                      ) : null}
+                      <TouchableOpacity
+                        onPress={() => togglePin(c.id)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={isPinned ? "pin" : "pin-outline"}
+                          size={14}
+                          color={isPinned ? T.accent : T.mutedText}
+                        />
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
                   <Text style={{ color: T.textColor, marginTop: 2 }}>
@@ -333,36 +353,45 @@ export default function CommentDrawer({
             </View>
           )}
 
-          <View style={[styles.inputRow, { borderTopColor: T.border }]}>
-            <TextInput
-              value={text}
-              onChangeText={handleTextChange}
-              placeholder="Yorum yaz…"
-              placeholderTextColor={T.mutedText}
-              style={[
-                styles.input,
-                {
-                  color: T.textColor,
-                  backgroundColor: T.backgroundColor,
-                  borderColor: T.border,
-                },
-              ]}
-              multiline
-            />
+          {inputDisabled ? (
+            <View style={[styles.inputRow, { borderTopColor: T.border, paddingVertical: 14 }]}>
+              <Text style={{ color: T.mutedText, fontSize: 13, fontWeight: "600", flex: 1 }}>
+                {inputDisabledMessage ?? t("corporate.comments.disabledBody")}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.inputRow, { borderTopColor: T.border }]}>
+              <TextInput
+                value={text}
+                onChangeText={handleTextChange}
+                placeholder={t("corporate.feed.commentPlaceholder")}
+                placeholderTextColor={T.mutedText}
+                style={[
+                  styles.input,
+                  {
+                    color: T.textColor,
+                    backgroundColor: T.backgroundColor,
+                    borderColor: T.border,
+                  },
+                ]}
+                multiline
+                editable={!inputDisabled}
+              />
 
-            <TouchableOpacity
-              onPress={submit}
-              disabled={!text.trim()}
-              style={[
-                styles.sendBtn,
-                {
-                  backgroundColor: text.trim() ? T.accent : T.border,
-                },
-              ]}
-            >
-              <Ionicons name="send" size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                onPress={submit}
+                disabled={!text.trim() || inputDisabled}
+                style={[
+                  styles.sendBtn,
+                  {
+                    backgroundColor: text.trim() && !inputDisabled ? T.accent : T.border,
+                  },
+                ]}
+              >
+                <Ionicons name="send" size={16} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
         </KeyboardAvoidingView>
       </Animated.View>
     </View>

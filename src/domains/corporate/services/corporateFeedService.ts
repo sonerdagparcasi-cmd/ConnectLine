@@ -1,6 +1,10 @@
 // src/domains/corporate/services/corporateFeedService.ts
+/**
+ * @deprecated Kullanılmıyor — kurumsal akış `corporateFeedStateService` + `useCorporateFeed`.
+ * Sonraki temizlik fazında kaldırılabilir (kuyruk/mock API birleştirmesi).
+ */
 
-import type { CorporateFeedPost } from "../types/feed.types";
+import type { CorporatePost } from "../types/feed.types";
 import type { CorporateFeedApi } from "./corporateFeedApi";
 import { mockCorporateFeedApi } from "./mockCorporateFeedApi";
 
@@ -13,7 +17,7 @@ import { mockCorporateFeedApi } from "./mockCorporateFeedApi";
  * ADIM 14: Offline queue + retry + exponential backoff + pending/failed
  *
  * KİLİTLER:
- * - Feed type değişmez (CorporateFeedPost)
+ * - Feed type değişmez (CorporatePost)
  * - Hook API değişmez (getFeed / addPost / toggleLike)
  * - Like + double tap UX değişmez
  */
@@ -24,7 +28,7 @@ import { mockCorporateFeedApi } from "./mockCorporateFeedApi";
 
 type SyncStatus = "pending" | "synced" | "failed";
 
-type FeedPostInternal = CorporateFeedPost & {
+type FeedPostInternal = CorporatePost & {
   syncStatus?: SyncStatus;
   clientId?: string; // optimistic create için
 };
@@ -41,7 +45,7 @@ type QueueCreatePost = QueueItemBase & {
   kind: "createPost";
   companyId: string;
   clientId: string;
-  post: CorporateFeedPost;
+  post: CorporatePost;
 };
 
 type QueueToggleLike = QueueItemBase & {
@@ -56,7 +60,7 @@ type EnqueueCreatePostInput = {
   kind: "createPost";
   companyId: string;
   clientId: string;
-  post: CorporateFeedPost;
+  post: CorporatePost;
 };
 
 type EnqueueToggleLikeInput = {
@@ -110,7 +114,7 @@ function computeBackoffMs(retries: number) {
 }
 
 function mergeRemoteAndLocal(
-  remote: CorporateFeedPost[],
+  remote: CorporatePost[],
   local: FeedPostInternal[]
 ): FeedPostInternal[] {
   const remoteIds = new Set(remote.map((p) => p.id));
@@ -264,7 +268,7 @@ class CorporateFeedService {
   /* PUBLIC API                                                      */
   /* -------------------------------------------------------------- */
 
-  async getFeed(companyId: string): Promise<CorporateFeedPost[]> {
+  async getFeed(companyId: string): Promise<CorporatePost[]> {
     await this.flushQueueDue();
 
     const remote = await this.api.fetchFeed(companyId);
@@ -274,7 +278,7 @@ class CorporateFeedService {
     return LOCAL_FEED;
   }
 
-  async addPost(post: CorporateFeedPost): Promise<void> {
+  async addPost(post: CorporatePost): Promise<void> {
     const clientId = genId("client-post");
 
     const optimistic: FeedPostInternal = {
@@ -300,11 +304,11 @@ class CorporateFeedService {
     LOCAL_FEED = LOCAL_FEED.map((p) => {
       if (p.id !== postId) return p;
 
-      const nextLiked = !p.liked;
+      const nextLiked = !p.likedByMe;
       return {
         ...p,
-        liked: nextLiked,
-        likeCount: nextLiked ? p.likeCount + 1 : p.likeCount - 1,
+        likedByMe: nextLiked,
+        likeCount: nextLiked ? p.likeCount + 1 : Math.max(0, p.likeCount - 1),
       };
     });
 

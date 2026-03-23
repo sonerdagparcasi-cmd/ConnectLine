@@ -1,37 +1,32 @@
 // src/domains/corporate/feed/screens/CorporateFeedScreen.tsx
-// 🔒 ADIM 5–9 + FAZ 8B + FAZ 10C + FAZ 12 — FEED + ARCHIVE ACTIVE
 
 import { useNavigation } from "@react-navigation/native";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
   Text,
+  TouchableOpacity,
   View,
+  type ViewToken,
 } from "react-native";
 
 import { t } from "../../../../shared/i18n/t";
 import { useAppTheme } from "../../../../shared/theme/appTheme";
 
-/* UI */
 import CorporateTopBar from "../../components/CorporateTopBar";
 import CorporateFeedItem from "../components/CorporateFeedItem";
 import FeedShareSheet, { FeedSharePayload } from "../components/FeedShareSheet";
 
-/* Hooks */
 import { useCompany } from "../../hooks/useCompany";
 import { useCorporateFeed } from "../../hooks/useCorporateFeed";
 
-/* Types */
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type {
-  CorporatePostDetailPayload,
-  CorporateStackParamList,
-} from "../../navigation/CorporateNavigator";
+import type { CorporateStackParamList } from "../../navigation/CorporateNavigator";
 import type { CorporateFeedPost } from "../../types/feed.types";
-
-/* ------------------------------------------------------------------ */
+import { refreshCorporateUnreadSubscribers } from "../../services/corporateNotificationService";
+import { syncCorporateViewerFromCompanyRole } from "../../services/corporateViewerIdentity";
 
 type NavProp = NativeStackNavigationProp<CorporateStackParamList>;
 
@@ -42,6 +37,11 @@ export default function CorporateFeedScreen() {
   const companyId = "c1";
 
   const { company, isOwner, visibility } = useCompany(companyId);
+
+  useEffect(() => {
+    syncCorporateViewerFromCompanyRole(isOwner, companyId);
+    refreshCorporateUnreadSubscribers();
+  }, [isOwner, companyId]);
 
   const companyName = useMemo(() => {
     const name = company?.name;
@@ -62,76 +62,53 @@ export default function CorporateFeedScreen() {
     Record<string, true>
   >({});
 
-  const listRef = useRef<FlatList<any>>(null);
+  const listRef = useRef<FlatList<CorporateFeedPost>>(null);
+
+  const [primaryVisiblePostId, setPrimaryVisiblePostId] = useState<
+    string | null
+  >(null);
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const first = viewableItems.find(
+        (v) => v.isViewable && v.item && typeof v.item === "object"
+      );
+      const id =
+        first && "id" in (first.item as object)
+          ? String((first.item as CorporateFeedPost).id)
+          : null;
+      setPrimaryVisiblePostId(id);
+    }
+  ).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 55,
+  }).current;
 
   const isEmptyFeed = !loading && (!posts || posts.length === 0);
 
-  /* ------------------------------------------------------------------ */
-  /* UI COUNTER MAPPER                                                  */
-  /* ------------------------------------------------------------------ */
-
   const mapToUiPost = useCallback(
     (p: CorporateFeedPost) => {
-      const anyP: any = p as any;
-
-      const likesRaw =
-        anyP.likes ?? anyP.likeCount ?? anyP.like_count ?? 0;
-
-      const commentsRaw =
-        anyP.comments ??
-        anyP.commentCount ??
-        anyP.comment_count ??
-        0;
-
-      const likedRaw =
-        anyP.liked ?? anyP.isLiked ?? anyP.is_liked ?? false;
-
       const archived = !!archivedPostIds[p.id];
-
       return {
         ...p,
-        likes: Number.isFinite(likesRaw) ? likesRaw : 0,
-        comments: Number.isFinite(commentsRaw) ? commentsRaw : 0,
-        liked: !!likedRaw,
+        likes: p.likeCount,
+        comments: p.commentCount,
+        liked: p.likedByMe,
         archived,
       };
     },
     [archivedPostIds]
   );
 
-  /* ------------------------------------------------------------------ */
-  /* DTO BUILDER                                                        */
-  /* ------------------------------------------------------------------ */
-
-  const buildPostDetailPayload = useCallback(
-    (post: CorporateFeedPost): CorporatePostDetailPayload => {
-      const anyP: any = post as any;
-
-      return {
-        id: post.id,
-        content: anyP.text ?? anyP.content ?? "",
-        createdAt: post.createdAt,
-        media: Array.isArray(post.media) ? post.media : [],
-        likeCount:
-          Number.isFinite(anyP.likeCount) ? anyP.likeCount : 0,
-        isLiked: !!(anyP.liked ?? anyP.isLiked),
-      };
-    },
-    []
-  );
-
-  /* ------------------------------------------------------------------ */
-  /* NAVIGATION                                                         */
-  /* ------------------------------------------------------------------ */
-
   const openPostDetail = useCallback(
     (post: CorporateFeedPost) => {
       navigation.navigate("CorporatePostDetail", {
-        post: buildPostDetailPayload(post),
+        postId: post.id,
         companyName,
       });
     },
-    [navigation, companyName, buildPostDetailPayload]
+    [navigation, companyName]
   );
 
   const openMediaPreview = useCallback(
@@ -140,6 +117,7 @@ export default function CorporateFeedScreen() {
 
       navigation.navigate("CorporateMediaPreview", {
         media: post.media,
+        overlays: post.overlays,
         initialIndex: index,
       });
     },
@@ -161,10 +139,6 @@ export default function CorporateFeedScreen() {
   const canShare =
     !!sharePayload && (isOwner || visibility === "public");
 
-  /* ------------------------------------------------------------------ */
-  /* ARCHIVE                                                            */
-  /* ------------------------------------------------------------------ */
-
   const archivePost = useCallback((postId: string) => {
     setArchivedPostIds((prev) => {
       if (prev[postId]) return prev;
@@ -172,9 +146,9 @@ export default function CorporateFeedScreen() {
     });
   }, []);
 
-  /* ------------------------------------------------------------------ */
-  /* RENDER                                                             */
-  /* ------------------------------------------------------------------ */
+  const openCreate = useCallback(() => {
+    navigation.navigate("CorporateCreateEditPost", { companyId });
+  }, [navigation, companyId]);
 
   return (
     <View style={{ flex: 1, backgroundColor: T.backgroundColor }}>
@@ -198,7 +172,7 @@ export default function CorporateFeedScreen() {
               lineHeight: 18,
             }}
           >
-            Bu kurum paylaşımlarını yalnızca sınırlı kişilerle paylaşıyor.
+            {t("corporate.feed.visitorBlocked")}
           </Text>
         </View>
       ) : isEmptyFeed ? (
@@ -219,7 +193,7 @@ export default function CorporateFeedScreen() {
               lineHeight: 18,
             }}
           >
-            Bu kurum henüz paylaşım yapmamış.
+            {t("corporate.feed.empty")}
           </Text>
         </View>
       ) : (
@@ -233,7 +207,9 @@ export default function CorporateFeedScreen() {
             data={posts}
             refreshing={loading}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 28 }}
+            contentContainerStyle={{ paddingBottom: 88 }}
+            viewabilityConfig={viewabilityConfig}
+            onViewableItemsChanged={onViewableItemsChanged}
             renderItem={({ item }) => {
               const uiPost = mapToUiPost(item);
 
@@ -242,6 +218,7 @@ export default function CorporateFeedScreen() {
                   post={uiPost}
                   companyId={companyId}
                   companyName={companyName}
+                  isMediaVisible={primaryVisiblePostId === item.id}
                   onPressMedia={(index) =>
                     openMediaPreview(item, index)
                   }
@@ -256,6 +233,32 @@ export default function CorporateFeedScreen() {
           />
         </KeyboardAvoidingView>
       )}
+
+      {isOwner && !isFeedBlockedForVisitor ? (
+        <TouchableOpacity
+          onPress={openCreate}
+          activeOpacity={0.9}
+          style={{
+            position: "absolute",
+            right: 20,
+            bottom: 28,
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            backgroundColor: T.textColor,
+            alignItems: "center",
+            justifyContent: "center",
+            shadowColor: "#000",
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 4 },
+          }}
+        >
+          <Text style={{ color: T.backgroundColor, fontSize: 28, fontWeight: "300" }}>
+            +
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       <FeedShareSheet
         visible={canShare}

@@ -1,37 +1,48 @@
 // src/domains/corporate/screens/CorporatePostDetailScreen.tsx
-// 🔒 POST DETAIL + NAV (STABİL)
+// 🔒 Post detay — corporateFeedStateService tek kaynak
 
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 
 import AppGradientHeader from "../../../shared/components/AppGradientHeader";
+import { t } from "../../../shared/i18n/t";
 import { useAppTheme } from "../../../shared/theme/appTheme";
 
-/* UI */
 import CommentDrawer from "../feed/components/CommentDrawer";
 import CorporateFeedMedia from "../feed/components/CorporateFeedMedia";
 import FeedReactionBar from "../feed/components/FeedReactionBar";
 import FeedShareSheet, {
   FeedSharePayload,
 } from "../feed/components/FeedShareSheet";
+import { useCompany } from "../hooks/useCompany";
 
-/* Types */
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { CorporateFeedComment } from "../feed/types/feed.types";
 import type { CorporateStackParamList } from "../navigation/CorporateNavigator";
-
-/* ------------------------------------------------------------------ */
-/* TYPES                                                              */
-/* ------------------------------------------------------------------ */
+import {
+  addComment,
+  deleteCorporateComment,
+  getCorporateComments,
+  getCorporatePostById,
+  isCorporatePostSaved,
+  subscribeCorporateFeed,
+  toggleLike,
+  toggleSave,
+} from "../services/corporateFeedStateService";
+import { refreshCorporateUnreadSubscribers } from "../services/corporateNotificationService";
+import {
+  getCorporateActorUserId,
+  syncCorporateViewerFromCompanyRole,
+} from "../services/corporateViewerIdentity";
+import { getCorporateCaption } from "../utils/corporatePostNormalize";
 
 type RouteProps = RouteProp<
   CorporateStackParamList,
@@ -40,79 +51,112 @@ type RouteProps = RouteProp<
 
 type NavProp = NativeStackNavigationProp<CorporateStackParamList>;
 
-/* ------------------------------------------------------------------ */
-/* SCREEN                                                             */
-/* ------------------------------------------------------------------ */
-
 export default function CorporatePostDetailScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteProps>();
 
-  const { post, companyName } = route.params;
+  const { postId, companyName } = route.params;
 
-  const [shareOpen, setShareOpen] = React.useState(false);
-  const [commentOpen, setCommentOpen] = React.useState(false);
-  const [comments, setComments] = React.useState<CorporateFeedComment[]>([]);
+  const [feedEpoch, setFeedEpoch] = useState(0);
 
-  /* ------------------------------------------------------------------ */
-  /* MEDIA NAVIGATION (KİLİTLİ)                                         */
-  /* ------------------------------------------------------------------ */
+  const livePost = getCorporatePostById(postId);
+  const companyId = livePost?.companyId ?? "c1";
+  const { isOwner } = useCompany(companyId);
+
+  useEffect(() => {
+    syncCorporateViewerFromCompanyRole(isOwner, companyId);
+    refreshCorporateUnreadSubscribers();
+  }, [isOwner, companyId]);
+
+  useEffect(() => {
+    const unsub = subscribeCorporateFeed(() => setFeedEpoch((n) => n + 1));
+    return unsub;
+  }, [postId]);
+
+  const comments = getCorporateComments(postId);
+  const saved = isCorporatePostSaved(postId);
+
+  const [shareOpen, setShareOpen] = useState(false);
+  const [commentOpen, setCommentOpen] = useState(false);
+
+  useEffect(() => {
+    if (!getCorporatePostById(postId)) {
+      navigation.goBack();
+    }
+  }, [postId, navigation, feedEpoch]);
+
+  const drawerComments = useMemo(() => {
+    const actor = getCorporateActorUserId();
+    return comments.map((c) => ({
+      id: c.id,
+      author:
+        c.authorUserId === actor
+          ? t("corporate.comments.you")
+          : t("corporate.comments.authorNetwork"),
+      body: c.text,
+      createdAt: new Date(c.createdAt).toISOString(),
+      canDelete:
+        c.authorUserId === actor ||
+        (isOwner && livePost?.companyId === companyId),
+    }));
+  }, [comments, isOwner, companyId, livePost?.companyId]);
+
+  const sharePayload: FeedSharePayload = {
+    postId,
+    companyName,
+  };
 
   function openMedia(index: number) {
-    if (!post.media || post.media.length === 0) return;
-
+    if (!livePost?.media?.length) return;
     navigation.navigate("CorporateMediaPreview", {
-      media: post.media,
+      media: livePost.media,
+      overlays: livePost.overlays,
       initialIndex: index,
     });
   }
 
-  /* ------------------------------------------------------------------ */
-  /* COMMENTS (UI ONLY)                                                 */
-  /* ------------------------------------------------------------------ */
-
   function handleAddComment(text: string) {
-    const newComment: CorporateFeedComment = {
-      id: `${Date.now()}`,
-      postId: post.id,
-      authorId: "me",
-      authorName: "Sen",
-      content: text,
-      createdAt: new Date().toISOString(),
-      likeCount: 0,
-    };
-
-    setComments((prev) => [newComment, ...prev]);
+    if (!livePost) return;
+    addComment(livePost.id, text);
   }
 
-  const sharePayload: FeedSharePayload = {
-    postId: post.id,
-    companyName,
-  };
+  function handleDeleteComment(commentId: string) {
+    deleteCorporateComment(postId, commentId);
+  }
 
-  const drawerComments = comments.map((c) => ({
-    id: c.id,
-    author: c.authorName,
-    body: c.content,
-    createdAt: c.createdAt,
-  }));
+  function onPressComment() {
+    if (!livePost) return;
+    if (livePost.commentsDisabled) {
+      Alert.alert(
+        t("corporate.comments.disabledTitle"),
+        t("corporate.comments.disabledBody")
+      );
+      return;
+    }
+    setCommentOpen(true);
+  }
 
-  /* ------------------------------------------------------------------ */
-  /* RENDER                                                            */
-  /* ------------------------------------------------------------------ */
+  if (!livePost) {
+    return (
+      <View style={[styles.root, { backgroundColor: T.backgroundColor }]} />
+    );
+  }
+
+  const caption = getCorporateCaption(livePost);
 
   return (
     <View style={[styles.root, { backgroundColor: T.backgroundColor }]}>
-      {/* ================= HEADER ================= */}
-      <AppGradientHeader title="Paylaşım" onBack={() => navigation.goBack()} />
+      <AppGradientHeader
+        title={t("corporate.postDetail.title")}
+        onBack={() => navigation.goBack()}
+      />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.container}>
-          {/* ================= AUTHOR ================= */}
           <View style={styles.authorRow}>
             <View
               style={[
@@ -136,48 +180,52 @@ export default function CorporatePostDetailScreen() {
               </Text>
 
               <Text style={[styles.time, { color: T.mutedText }]}>
-                {new Date(post.createdAt).toLocaleString()}
+                {new Date(livePost.createdAt).toLocaleString()}
               </Text>
             </View>
           </View>
 
-          {/* ================= MEDIA ================= */}
-          {post.media && post.media.length > 0 && (
+          {livePost.media && livePost.media.length > 0 && (
             <View style={styles.mediaBlock}>
               <CorporateFeedMedia
-                media={post.media}
+                media={livePost.media}
+                overlays={livePost.overlays}
                 onPress={openMedia}
+                isVisible
+                onDoubleTapLike={() => toggleLike(livePost.id)}
               />
             </View>
           )}
 
-          {/* ================= TEXT ================= */}
-          {!!post.content && (
+          {!!caption && (
             <Text style={[styles.text, { color: T.textColor }]}>
-              {post.content}
+              {caption}
             </Text>
           )}
 
-          {/* ================= META ================= */}
-          {post.likeCount > 0 && (
+          {!livePost.likeCountHidden && livePost.likeCount > 0 ? (
             <Text style={[styles.meta, { color: T.mutedText }]}>
-              {post.likeCount} beğeni
+              {livePost.likeCount} {t("corporate.postDetail.likes")}
             </Text>
-          )}
+          ) : null}
 
-          {/* ================= ACTIONS ================= */}
-          <FeedReactionBar
-            liked={!!post.isLiked}
-            likes={post.likeCount}
-            comments={comments.length}
-            onLike={() => {}}
-            onComment={() => setCommentOpen(true)}
-            onShare={() => setShareOpen(true)}
-          />
+          <View style={{ paddingHorizontal: 16 }}>
+            <FeedReactionBar
+              liked={!!livePost.likedByMe}
+              likes={livePost.likeCount}
+              comments={livePost.commentCount}
+              onLike={() => toggleLike(livePost.id)}
+              onComment={onPressComment}
+              onShare={() => setShareOpen(true)}
+              likeCountHidden={!!livePost.likeCountHidden}
+              showSave
+              saved={saved}
+              onSave={() => toggleSave(livePost.id)}
+            />
+          </View>
         </View>
       </KeyboardAvoidingView>
 
-      {/* ================= SHARE ================= */}
       <FeedShareSheet
         visible={shareOpen}
         payload={sharePayload}
@@ -187,47 +235,33 @@ export default function CorporatePostDetailScreen() {
         onExternal={() => setShareOpen(false)}
       />
 
-      {/* ================= COMMENTS ================= */}
       <CommentDrawer
         visible={commentOpen}
         comments={drawerComments}
         onClose={() => setCommentOpen(false)}
         onAdd={handleAddComment}
+        inputDisabled={!!livePost.commentsDisabled}
+        inputDisabledMessage={t("corporate.comments.disabledBody")}
+        onDeleteComment={handleDeleteComment}
       />
     </View>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* STYLES                                                             */
-/* ------------------------------------------------------------------ */
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
-
-  header: {
-    height: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-  },
-
   container: {
     paddingTop: 14,
     paddingBottom: 24,
   },
-
   authorRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
     gap: 12,
   },
-
   avatar: {
     width: 44,
     height: 44,
@@ -236,28 +270,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   companyName: {
     fontSize: 15,
     fontWeight: "900",
   },
-
   time: {
     fontSize: 12,
     marginTop: 2,
   },
-
   mediaBlock: {
     marginTop: 12,
   },
-
   text: {
     marginTop: 12,
     paddingHorizontal: 16,
     fontSize: 14,
     lineHeight: 21,
   },
-
   meta: {
     marginTop: 8,
     paddingHorizontal: 16,

@@ -20,6 +20,8 @@ import AppGradientHeader from "../../../../shared/components/AppGradientHeader";
 import { useAppTheme } from "../../../../shared/theme/appTheme";
 import { useCompany } from "../../hooks/useCompany";
 import { corporateProfileDraftStorage } from "../../services/corporateProfileDraftStorage";
+import { refreshCorporateUnreadSubscribers } from "../../services/corporateNotificationService";
+import { syncCorporateViewerFromCompanyRole } from "../../services/corporateViewerIdentity";
 
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { CorporateStackParamList } from "../../navigation/CorporateNavigator";
@@ -60,6 +62,11 @@ export default function CorporateHomeScreen() {
   const navigation = useNavigation<Nav>();
 
   const { company, isOwner, profileView } = useCompany("c1");
+
+  useEffect(() => {
+    syncCorporateViewerFromCompanyRole(isOwner, "c1");
+    refreshCorporateUnreadSubscribers();
+  }, [isOwner]);
 
   const [mode, setMode] = useState<ProfileMode | null>(null);
   const isCompanyMode = mode === "company";

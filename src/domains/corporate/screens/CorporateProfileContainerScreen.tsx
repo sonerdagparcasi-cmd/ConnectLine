@@ -4,13 +4,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import ProfileVisitorActions from "../components/ProfileVisitorActions";
 import SimilarCompanies from "../components/SimilarCompanies";
 import { useCompany } from "../hooks/useCompany";
+import { refreshCorporateUnreadSubscribers } from "../services/corporateNotificationService";
+import { syncCorporateViewerFromCompanyRole } from "../services/corporateViewerIdentity";
 
 function norm(v: unknown) {
   return String(v ?? "").trim();
@@ -35,6 +37,11 @@ export default function CorporateProfileContainerScreen() {
     isFollowing,
     toggleFollow,
   } = useCompany(stableCompanyId);
+
+  useEffect(() => {
+    syncCorporateViewerFromCompanyRole(isOwner, stableCompanyId);
+    refreshCorporateUnreadSubscribers();
+  }, [isOwner, stableCompanyId]);
 
   const isPrivateForVisitor = visibility === "private" && !isOwner;
   const canShowVisitorActions = isOwner || visibility === "public";

@@ -1,3 +1,7 @@
+/**
+ * @deprecated Hiçbir yerden import edilmiyor — AI/ranking ile ilişkili eski feed servisi.
+ * Sonraki temizlikte kaldırılabilir veya yeni kurumsal işe alım akışına taşınabilir.
+ */
 import { RankedItem, RankingQuery, SortMode } from "../../ai/ranking.types";
 import { rankApplications } from "../../ai/rankingEngine";
 import { applicationService } from "../../recruitment/services/applicationService";

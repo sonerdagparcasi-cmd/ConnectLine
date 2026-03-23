@@ -21,7 +21,9 @@ import CorporateHomeScreen from "../home/screens/CorporateHomeScreen";
 import CorporateFeedScreen from "../feed/screens/CorporateFeedScreen";
 
 /* Feed / Media */
+import CorporateCreateEditPostScreen from "../feed/screens/CorporateCreateEditPostScreen";
 import CorporateMediaPreviewScreen from "../screens/CorporateMediaPreviewScreen";
+import CorporateNotificationsPlaceholderScreen from "../screens/CorporateNotificationsPlaceholderScreen";
 import CorporatePostDetailScreen from "../screens/CorporatePostDetailScreen";
 
 /* Jobs */
@@ -53,20 +55,11 @@ import CorporateOnboardingScreen from "../onboarding/screens/CorporateOnboarding
 import CorporateRoleSelectScreen from "../onboarding/screens/CorporateRoleSelectScreen";
 
 /* Types */
-import type { CorporateMediaItem } from "../types/feed.types";
+import type { CorporateMediaItem, CorporateOverlay } from "../types/feed.types";
 
 /* ==================================================================== */
 /* ROUTE TYPES                                                          */
 /* ==================================================================== */
-
-export type CorporatePostDetailPayload = {
-  id: string;
-  content?: string;
-  createdAt: string;
-  media?: CorporateMediaItem[];
-  likeCount: number;
-  isLiked?: boolean;
-};
 
 export type CorporateStackParamList = {
   /* Identity */
@@ -86,14 +79,22 @@ export type CorporateStackParamList = {
 
   /* Feed */
   CorporatePostDetail: {
-    post: CorporatePostDetailPayload;
+    postId: string;
     companyName: string;
   };
 
   CorporateMediaPreview: {
     media: CorporateMediaItem[];
+    overlays?: CorporateOverlay[];
     initialIndex?: number;
   };
+
+  CorporateCreateEditPost: {
+    companyId: string;
+    postId?: string;
+  };
+
+  CorporateNotifications: undefined;
 
   /* Jobs */
   CorporateJobs: undefined;
@@ -202,6 +203,16 @@ export default function CorporateNavigator({ entry = "profile" }: Props) {
       <Stack.Screen
         name="CorporateMediaPreview"
         component={CorporateMediaPreviewScreen}
+      />
+
+      <Stack.Screen
+        name="CorporateCreateEditPost"
+        component={CorporateCreateEditPostScreen}
+      />
+
+      <Stack.Screen
+        name="CorporateNotifications"
+        component={CorporateNotificationsPlaceholderScreen}
       />
 
       {/* Jobs */}

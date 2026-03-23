@@ -1,239 +1,279 @@
 // src/domains/corporate/feed/components/CorporateFeedMedia.tsx
-// 🔒 D2 – VIDEO UX STABİL (FEED HİZALI)
+// 🔒 Kurumsal medya motoru — carousel, overlay, görünür öğede video
 
 import { Ionicons } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Dimensions,
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 
 import { useAppTheme } from "../../../../shared/theme/appTheme";
-import type { CorporateMediaItem } from "../../types/feed.types";
-
-/* ------------------------------------------------------------------ */
-/* TYPES                                                              */
-/* ------------------------------------------------------------------ */
+import CorporatePostOverlays from "../../components/CorporatePostOverlays";
+import type { CorporateMediaItem, CorporateOverlay } from "../../types/feed.types";
+import { sortCorporateMedia } from "../../utils/corporatePostNormalize";
 
 type Props = {
   media: CorporateMediaItem[];
+  overlays?: CorporateOverlay[];
   onPress: (index: number) => void;
+  /** Liste içinde görünür hücre — yalnız aktif slaytta video oynar */
+  isVisible?: boolean;
+  onDoubleTapLike?: () => void;
 };
 
-/**
- * 🔒 CorporateFeedMedia (D2 – FEED STANDART)
- *
- * - Dimensions YOK
- * - %100 parent width
- * - Feed / PostDetail ile birebir
- * - Autoplay yok
- * - Varsayılan sessiz
- */
+function mediaBlockHeight(item: CorporateMediaItem, containerW: number): number {
+  if (item.width && item.height && item.width > 0) {
+    const ratio = item.height / item.width;
+    const h = containerW * ratio;
+    return Math.min(Math.max(h, containerW * 0.52), containerW * 1.45);
+  }
+  return containerW / 1.25;
+}
 
-export default function CorporateFeedMedia({ media, onPress }: Props) {
+export default function CorporateFeedMedia({
+  media,
+  overlays,
+  onPress,
+  isVisible = true,
+  onDoubleTapLike,
+}: Props) {
   const T = useAppTheme();
+  const [layoutW, setLayoutW] = useState(0);
+  const [page, setPage] = useState(0);
+  const lastTap = useRef(0);
+  const pendingOpen = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const screenW = Dimensions.get("window").width;
 
-  const [muted, setMuted] = useState(true);
-  const videoRef = useRef<Video>(null);
+  const items = useMemo(() => sortCorporateMedia(media), [media]);
 
-  const items = useMemo(
-    () => [...media].sort((a, b) => a.order - b.order),
-    [media]
+  const slideW = layoutW > 0 ? layoutW : screenW;
+
+  const onScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const w = slideW || 1;
+      const x = e.nativeEvent.contentOffset.x;
+      setPage(Math.round(x / w));
+    },
+    [slideW]
+  );
+
+  const handleMediaPress = useCallback(
+    (index: number) => {
+      const now = Date.now();
+      if (now - lastTap.current < 300) {
+        if (pendingOpen.current) {
+          clearTimeout(pendingOpen.current);
+          pendingOpen.current = null;
+        }
+        lastTap.current = 0;
+        onDoubleTapLike?.();
+        return;
+      }
+      lastTap.current = now;
+      if (pendingOpen.current) clearTimeout(pendingOpen.current);
+      pendingOpen.current = setTimeout(() => {
+        pendingOpen.current = null;
+        lastTap.current = 0;
+        onPress(index);
+      }, 300);
+    },
+    [onDoubleTapLike, onPress]
   );
 
   if (!items.length) return null;
 
-  const hero = items[0];
-  const thumbs = items.slice(1, 4);
-  const remaining = Math.max(0, items.length - 4);
-
-  function toggleMute() {
-    setMuted((v) => !v);
-  }
+  const w = slideW;
 
   return (
-    <View style={styles.wrap}>
-      {/* ================= HERO ================= */}
-      <TouchableOpacity
-        activeOpacity={0.92}
-        onPress={() => onPress(0)}
-        style={[styles.hero, { borderColor: T.border }]}
+    <View
+      style={styles.wrap}
+      onLayout={(e) => setLayoutW(e.nativeEvent.layout.width)}
+    >
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        snapToInterval={slideW}
+        snapToAlignment="center"
+        onMomentumScrollEnd={onScrollEnd}
+        scrollEventThrottle={16}
       >
-        {hero.type === "image" ? (
-          <Image
-            source={{ uri: hero.uri }}
-            style={styles.heroMedia}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.heroMedia}>
-            <Video
-              ref={videoRef}
-              source={{ uri: hero.uri }}
-              style={StyleSheet.absoluteFill}
-              resizeMode={ResizeMode.COVER}
-              shouldPlay={false}
-              isMuted={muted}
-              useNativeControls={false}
-            />
+        {items.map((item, index) => {
+          const h = mediaBlockHeight(item, w);
+          const playVideo = isVisible && page === index && item.type === "video";
 
-            <View style={styles.playOverlay}>
-              <Ionicons
-                name="play-circle"
-                size={56}
-                color="rgba(255,255,255,0.95)"
-              />
-            </View>
-
-            <TouchableOpacity
-              onPress={toggleMute}
-              activeOpacity={0.8}
-              style={styles.audioToggle}
-            >
-              <Ionicons
-                name={muted ? "volume-mute" : "volume-high"}
-                size={18}
-                color="#fff"
-              />
-            </TouchableOpacity>
-          </View>
-        )}
-      </TouchableOpacity>
-
-      {/* ================= THUMBS ================= */}
-      {thumbs.length > 0 && (
-        <View style={styles.thumbRow}>
-          {thumbs.map((m, idx) => {
-            const realIndex = idx + 1;
-            const isLast = idx === thumbs.length - 1;
-            const showMore = remaining > 0 && isLast;
-
-            return (
-              <TouchableOpacity
-                key={m.id}
-                activeOpacity={0.9}
-                onPress={() => onPress(realIndex)}
+          return (
+            <View key={item.id} style={{ width: w }}>
+              <Pressable
+                onPress={() => handleMediaPress(index)}
                 style={[
-                  styles.thumb,
-                  { borderColor: T.border, backgroundColor: T.cardBg },
+                  styles.slide,
+                  {
+                    height: h,
+                    borderColor: T.border,
+                    backgroundColor: T.cardBg,
+                  },
                 ]}
               >
-                {m.type === "image" ? (
+                {item.type === "image" ? (
                   <Image
-                    source={{ uri: m.uri }}
+                    source={{ uri: item.uri }}
                     style={StyleSheet.absoluteFill}
                     resizeMode="cover"
                   />
                 ) : (
-                  <View style={StyleSheet.absoluteFill}>
-                    <Video
-                      source={{ uri: m.uri }}
-                      style={StyleSheet.absoluteFill}
-                      resizeMode={ResizeMode.COVER}
-                      shouldPlay={false}
-                      isMuted
-                      useNativeControls={false}
-                    />
-                    <View style={styles.smallPlay}>
-                      <Ionicons name="play" size={18} color="#fff" />
-                    </View>
-                  </View>
+                  <FeedVideoSlide
+                    uri={item.uri}
+                    posterUri={item.thumbnailUri}
+                    shouldPlay={!!playVideo}
+                  />
                 )}
 
-                {showMore && (
-                  <View style={styles.moreOverlay}>
-                    <Text style={styles.moreText}>{`+${remaining}`}</Text>
+                <CorporatePostOverlays
+                  overlays={overlays}
+                  width={w}
+                  height={h}
+                />
+
+                {item.type === "video" ? (
+                  <View style={styles.videoBadge} pointerEvents="none">
+                    <Ionicons name="videocam" size={14} color="#fff" />
                   </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
+                ) : null}
+              </Pressable>
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      {items.length > 1 ? (
+        <View style={styles.dots}>
+          {items.map((it, i) => (
+            <View
+              key={it.id}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor:
+                    i === page ? T.textColor : T.mutedText,
+                  opacity: i === page ? 0.9 : 0.35,
+                },
+              ]}
+            />
+          ))}
         </View>
-      )}
+      ) : null}
+
+      {items.length > 1 ? (
+        <View style={styles.indexRow}>
+          <Text style={[styles.indexText, { color: T.mutedText }]}>
+            {page + 1} / {items.length}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* STYLES                                                             */
-/* ------------------------------------------------------------------ */
+function FeedVideoSlide({
+  uri,
+  posterUri,
+  shouldPlay,
+}: {
+  uri: string;
+  posterUri?: string;
+  shouldPlay: boolean;
+}) {
+  const [muted, setMuted] = useState(true);
+  const videoRef = useRef<Video>(null);
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <Video
+        ref={videoRef}
+        source={{ uri }}
+        style={StyleSheet.absoluteFill}
+        resizeMode={ResizeMode.COVER}
+        shouldPlay={shouldPlay}
+        isMuted={muted}
+        isLooping
+        useNativeControls={false}
+        posterSource={posterUri ? { uri: posterUri } : undefined}
+      />
+
+      <Pressable
+        onPress={() => setMuted((m) => !m)}
+        style={styles.audioToggle}
+        hitSlop={8}
+      >
+        <Ionicons
+          name={muted ? "volume-mute" : "volume-high"}
+          size={18}
+          color="#fff"
+        />
+      </Pressable>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   wrap: {
+    marginTop: 4,
+  },
+  slide: {
+    width: "100%",
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  dots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
     marginTop: 10,
   },
-
-  hero: {
-    width: "100%",
-    aspectRatio: 1.6,
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-
-  heroMedia: {
-    width: "100%",
-    height: "100%",
+  indexRow: {
+    position: "absolute",
+    top: 10,
+    right: 12,
   },
-
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
+  indexText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
-
   audioToggle: {
     position: "absolute",
     right: 10,
     bottom: 10,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.5)",
     alignItems: "center",
     justifyContent: "center",
   },
-
-  thumbRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-  },
-
-  thumb: {
-    flex: 1,
-    aspectRatio: 1,
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-
-  smallPlay: {
+  videoBadge: {
     position: "absolute",
-    right: 8,
-    bottom: 8,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  moreOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    left: 10,
+    top: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     backgroundColor: "rgba(0,0,0,0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  moreText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 16,
   },
 });

@@ -22,8 +22,10 @@ import {
 
 import { ChatNotificationBadge } from "../../domains/chat/components/ChatNotificationBadge";
 import { chatService } from "../../domains/chat/services/chatService";
+import { subscribeCorporateUnreadCount } from "../../domains/corporate/services/corporateNotificationService";
 import { subscribeUnreadCount } from "../../domains/social/services/socialNotificationService";
 import { clearSession } from "../../shared/auth/authSession";
+import { t } from "../../shared/i18n/t";
 import { AppThemeProvider } from "../../shared/theme/appTheme";
 import { getColors } from "../../shared/theme/colors";
 
@@ -68,6 +70,7 @@ export default function AppShell({
   const systemDark = true;
   const [manualDark, setManualDark] = useState<boolean | null>(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [corporateUnreadCount, setCorporateUnreadCount] = useState(0);
 
   const isDark = manualDark ?? systemDark;
   const C = useMemo(() => getColors(isDark), [isDark]);
@@ -104,6 +107,11 @@ export default function AppShell({
 
   useEffect(() => {
     const unsubscribe = subscribeUnreadCount(setUnreadCount);
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeCorporateUnreadCount(setCorporateUnreadCount);
     return unsubscribe;
   }, []);
 
@@ -164,6 +172,7 @@ export default function AppShell({
               const active = activeTop === tab;
               const isChatTab = tab === "Mesajlar";
               const isSocialTab = tab === "Sosyal";
+              const isCorporateTab = tab === "Kurumsal";
               return (
                 <TouchableOpacity
                   key={tab}
@@ -192,6 +201,20 @@ export default function AppShell({
                       <View style={styles.socialBadge}>
                         <Text style={styles.socialBadgeText}>
                           {unreadCount > 9 ? "9+" : unreadCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {isCorporateTab && corporateUnreadCount > 0 ? (
+                      <View
+                        style={styles.socialBadge}
+                        accessibilityLabel={`${t("corporate.badge.a11y")}: ${
+                          corporateUnreadCount > 9 ? "9+" : corporateUnreadCount
+                        }`}
+                      >
+                        <Text style={styles.socialBadgeText}>
+                          {corporateUnreadCount > 9
+                            ? "9+"
+                            : corporateUnreadCount}
                         </Text>
                       </View>
                     ) : null}
