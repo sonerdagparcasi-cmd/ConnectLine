@@ -9,6 +9,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import SocialCreatePostScreen from "../screens/SocialCreatePostScreen";
 import SocialFeedScreen from "../screens/SocialFeedScreen";
 import SocialMediaPreviewScreen from "../screens/SocialMediaPreviewScreen";
+import SocialMediaViewerScreen from "../screens/SocialMediaViewerScreen";
 import SocialPostDetailScreen from "../screens/SocialPostDetailScreen";
 import SocialEditPostScreen from "../screens/SocialEditPostScreen";
 import SocialProfileContainerScreen from "../screens/SocialProfileContainerScreen";
@@ -88,6 +89,10 @@ export type SocialStackParamList = {
   SocialMediaPreview: {
     media: SocialMediaItem[];
     initialIndex?: number;
+  };
+  SocialMediaViewer: {
+    media: SocialMediaItem[];
+    startIndex?: number;
   };
 
   SocialStoryViewer:
@@ -202,6 +207,7 @@ export default function SocialNavigator({ entry = "feed" }: Props) {
 
       {/* MEDIA */}
       <Stack.Screen name="SocialMediaPreview" component={SocialMediaPreviewScreen} />
+      <Stack.Screen name="SocialMediaViewer" component={SocialMediaViewerScreen} />
 
       {/* STORY */}
       <Stack.Screen name="SocialStoryViewer" component={SocialStoryViewerScreen} />

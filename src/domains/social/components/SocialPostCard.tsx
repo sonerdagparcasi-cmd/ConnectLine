@@ -262,6 +262,14 @@ function SocialPostCard({
     mediaRef.current?.scrollToIndex({ index, animated: true });
   }
 
+  function openViewer(index: number) {
+    if (!media.length) return;
+    navigation.navigate("SocialMediaViewer", {
+      media,
+      startIndex: index,
+    });
+  }
+
   function onLikePress() {
     if (onToggleLike) {
       onToggleLike();
@@ -668,7 +676,7 @@ function SocialPostCard({
           renderItem={({ item: m, index: i }) => (
             <TouchableOpacity
               key={m.id}
-              onPress={() => selectMediaIndex(i)}
+              onPress={() => openViewer(i)}
               activeOpacity={0.8}
               style={[
                 styles.thumbnailItem,
