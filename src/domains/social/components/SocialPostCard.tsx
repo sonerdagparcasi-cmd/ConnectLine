@@ -13,9 +13,11 @@ import {
   Animated,
   FlatList,
   Image,
+  type GestureResponderEvent,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -160,12 +162,16 @@ function SocialPostCard({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartAnim = useRef(new Animated.Value(0)).current;
   const videoRefs = useRef<Record<string, Video | null>>({});
+  const videoRef = useRef<Video | null>(null);
+  const lastTap = useRef(0);
+  const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [, setTick] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [carouselWidth, setCarouselWidth] = useState(0);
   const [mediaRatios, setMediaRatios] = useState<Record<string, number>>({});
   const [bufferingById, setBufferingById] = useState<Record<string, boolean>>({});
+  const [muted, setMuted] = useState(true);
 
   useEffect(() => {
     const unsub = subscribeFeed(() => setTick((n) => n + 1));
@@ -185,6 +191,7 @@ function SocialPostCard({
     const activeMedia = media[activeIndex];
     if (!activeMedia || activeMedia.type !== "video") return;
     const activeVideoRef = videoRefs.current[activeMedia.id];
+    videoRef.current = activeVideoRef;
     if (!activeVideoRef) return;
     if (!isActive) {
       activeVideoRef.pauseAsync().catch(() => {});
@@ -192,6 +199,12 @@ function SocialPostCard({
       activeVideoRef.playAsync().catch(() => {});
     }
   }, [activeIndex, isActive, media]);
+
+  useEffect(() => {
+    return () => {
+      if (singleTapTimeoutRef.current) clearTimeout(singleTapTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!shouldPreload) return;
@@ -273,6 +286,50 @@ function SocialPostCard({
     setMediaRatios((prev) => (prev[id] === ratio ? prev : { ...prev, [id]: ratio }));
   }
 
+  async function seekBy(seconds: number) {
+    if (!videoRef.current) return;
+    const status = await videoRef.current.getStatusAsync();
+    if (!status.isLoaded) return;
+    let newPos = status.positionMillis + seconds * 1000;
+    if (newPos < 0) newPos = 0;
+    await videoRef.current.setPositionAsync(newPos);
+  }
+
+  function handleDoubleTap(e: GestureResponderEvent) {
+    const activeMedia = media[activeIndex];
+    if (!activeMedia || activeMedia.type !== "video" || !videoRef.current) return;
+    const { locationX } = e.nativeEvent;
+    const width = carouselWidth || e.nativeEvent.locationX * 2 || 1;
+    const leftZone = width * 0.3;
+    const rightZone = width * 0.7;
+    if (locationX < leftZone) {
+      seekBy(-10).catch(() => {});
+    } else if (locationX > rightZone) {
+      seekBy(10).catch(() => {});
+    } else {
+      videoRef.current.presentFullscreenPlayer().catch(() => {});
+    }
+  }
+
+  function handleTap(e: GestureResponderEvent) {
+    const activeMedia = media[activeIndex];
+    if (!activeMedia || activeMedia.type !== "video") return;
+    const now = Date.now();
+    const DOUBLE_PRESS_DELAY = 250;
+    if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+        singleTapTimeoutRef.current = null;
+      }
+      handleDoubleTap(e);
+    } else {
+      singleTapTimeoutRef.current = setTimeout(() => {
+        setMuted((prev) => !prev);
+      }, DOUBLE_PRESS_DELAY);
+    }
+    lastTap.current = now;
+  }
+
   function renderMedia({ item, index }: { item: SocialMediaItem; index: number }) {
     const pageWidth = carouselWidth || 1;
     const shouldPlay = item.type === "video" && isActive && index === activeIndex;
@@ -286,34 +343,47 @@ function SocialPostCard({
       >
         <View style={[styles.mediaWrapper, { aspectRatio: itemRatio }]}>
           {item.type === "video" ? (
-            <Video
-              ref={(ref) => {
-                videoRefs.current[item.id] = ref;
-              }}
-              source={{ uri: item.uri }}
-              style={[styles.media, { aspectRatio: itemRatio, backgroundColor: "#000" }]}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={shouldPlay}
-              isLooping
-              isMuted
-              posterSource={{ uri: item.uri }}
-              usePoster
-              onLoad={(status: AVPlaybackStatus) => {
-                if (!status.isLoaded) return;
-                const width = status.naturalSize?.width;
-                const height = status.naturalSize?.height;
-                if (width && height) {
-                  setMediaRatio(item.id, width / height);
-                }
-              }}
-              onPlaybackStatusUpdate={(status) => {
-                if (!status.isLoaded) return;
-                const next = !!status.isBuffering;
-                setBufferingById((prev) =>
-                  prev[item.id] === next ? prev : { ...prev, [item.id]: next }
-                );
-              }}
-            />
+            <TouchableWithoutFeedback onPress={handleTap}>
+              <View style={styles.videoTouchWrap}>
+                <Video
+                  ref={(ref) => {
+                    videoRefs.current[item.id] = ref;
+                    if (shouldPlay) videoRef.current = ref;
+                  }}
+                  source={{ uri: item.uri }}
+                  style={[styles.media, { aspectRatio: itemRatio, backgroundColor: "#000" }]}
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay={shouldPlay}
+                  isLooping
+                  isMuted={muted}
+                  useNativeControls={false}
+                  posterSource={{ uri: item.uri }}
+                  usePoster
+                  onLoad={(status: AVPlaybackStatus) => {
+                    if (!status.isLoaded) return;
+                    const width = status.naturalSize?.width;
+                    const height = status.naturalSize?.height;
+                    if (width && height) {
+                      setMediaRatio(item.id, width / height);
+                    }
+                  }}
+                  onPlaybackStatusUpdate={(status) => {
+                    if (!status.isLoaded) return;
+                    const next = !!status.isBuffering;
+                    setBufferingById((prev) =>
+                      prev[item.id] === next ? prev : { ...prev, [item.id]: next }
+                    );
+                  }}
+                />
+                <View style={styles.soundBadge}>
+                  <Ionicons
+                    name={muted ? "volume-mute" : "volume-high"}
+                    size={18}
+                    color="#fff"
+                  />
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
           ) : (
             <>
               <Image
@@ -605,6 +675,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 12,
     paddingTop: 6,
+  },
+  videoTouchWrap: {
+    width: "100%",
+  },
+  soundBadge: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    padding: 6,
+    borderRadius: 20,
   },
   bufferIndicator: {
     position: "absolute",
