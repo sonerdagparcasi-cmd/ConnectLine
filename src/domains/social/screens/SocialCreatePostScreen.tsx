@@ -31,6 +31,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Gesture,
   GestureDetector,
@@ -407,6 +408,7 @@ function EditorOverlayText({
 export default function SocialCreatePostScreen() {
   const T = useAppTheme();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const [caption, setCaption] = useState("");
   const [media, setMedia] = useState<PickedMedia[]>([]);
@@ -414,6 +416,7 @@ export default function SocialCreatePostScreen() {
   const [editorVisible, setEditorVisible] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [texts, setTexts] = useState<OverlayText[]>([]);
+  const [overlays, setOverlays] = useState<SocialPost["overlays"]>([]);
   const [activeTextId, setActiveTextId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -427,6 +430,10 @@ export default function SocialCreatePostScreen() {
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [videoCoverEditorIndex, setVideoCoverEditorIndex] = useState<number | null>(null);
   const [pendingCoverFrame, setPendingCoverFrame] = useState(0);
+
+  function uuid() {
+    return `ov_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  }
 
   const mediaRef = useRef<PickedMedia[]>([]);
   mediaRef.current = media;
@@ -853,6 +860,7 @@ export default function SocialCreatePostScreen() {
       settings,
 
       videoCovers,
+      overlays: overlays ?? [],
     };
 
     if (!canCreatePost()) {
@@ -1329,9 +1337,22 @@ export default function SocialCreatePostScreen() {
           )}
 
           {!editingTextId && (
-            <View style={styles.editorToolbar}>
+            <View
+              pointerEvents="box-none"
+              style={[
+                styles.editorSideToolsWrap,
+                {
+                  top: insets.top + 80,
+                },
+              ]}
+            >
               <TouchableOpacity
+                style={styles.editorSideToolBtn}
                 onPress={() => {
+                  const x = 120;
+                  const y = 200;
+                  const sw = Dimensions.get("window").width || 1;
+                  const sh = Dimensions.get("window").height || 1;
                   const id = `txt_${Date.now()}`;
                   setTexts((prev) => [
                     ...prev,
@@ -1339,22 +1360,92 @@ export default function SocialCreatePostScreen() {
                       id,
                       mediaIndex: safeEditorIndex,
                       text: "Metin",
-                      x: 120,
-                      y: 200,
+                      x,
+                      y,
                       scale: 1,
                       color: "#ffffff",
                       fontSize: OVERLAY_DEFAULT_FONT,
+                    },
+                  ]);
+                  setOverlays((prev) => [
+                    ...(prev ?? []),
+                    {
+                      id: uuid(),
+                      type: "text",
+                      x: x / sw,
+                      y: y / sh,
+                      value: "Metin",
                     },
                   ]);
                   setActiveTextId(id);
                   setEditingTextId(id);
                 }}
               >
-                <Text style={styles.editorToolbarLabel}>Yazı</Text>
+                <Ionicons name="text-outline" size={18} color="#fff" />
+                <Text style={styles.editorSideToolText}>Yazı</Text>
               </TouchableOpacity>
 
-              <Text style={styles.editorToolbarMuted}>Etiket</Text>
-              <Text style={styles.editorToolbarMuted}>Ayarlar</Text>
+              <TouchableOpacity
+                style={styles.editorSideToolBtn}
+                onPress={() => {
+                  if (activeTextId) {
+                    setTexts((prev) =>
+                      prev.map((t) =>
+                        t.id === activeTextId
+                          ? { ...t, text: t.text.includes("#") ? t.text : `${t.text} #` }
+                          : t
+                      )
+                    );
+                    setEditingTextId(activeTextId);
+                    return;
+                  }
+                  const x = 120;
+                  const y = 260;
+                  const sw = Dimensions.get("window").width || 1;
+                  const sh = Dimensions.get("window").height || 1;
+                  const id = `txt_${Date.now()}`;
+                  setTexts((prev) => [
+                    ...prev,
+                    {
+                      id,
+                      mediaIndex: safeEditorIndex,
+                      text: "#",
+                      x,
+                      y,
+                      scale: 1,
+                      color: "#ffffff",
+                      fontSize: OVERLAY_DEFAULT_FONT,
+                    },
+                  ]);
+                  setOverlays((prev) => [
+                    ...(prev ?? []),
+                    {
+                      id: uuid(),
+                      type: "tag",
+                      x: x / sw,
+                      y: y / sh,
+                      value: "#",
+                    },
+                  ]);
+                  setActiveTextId(id);
+                  setEditingTextId(id);
+                }}
+              >
+                <Ionicons name="pricetag-outline" size={18} color="#fff" />
+                <Text style={styles.editorSideToolText}>Etiket</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.editorSideToolBtn}
+                onPress={() => {
+                  if (activeTextId) {
+                    setEditingTextId(activeTextId);
+                  }
+                }}
+              >
+                <Ionicons name="settings-outline" size={18} color="#fff" />
+                <Text style={styles.editorSideToolText}>Ayarlar</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -1752,29 +1843,31 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  editorToolbar: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-around",
+  editorSideToolsWrap: {
+    position: "absolute",
+    right: 12,
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.2)",
+    gap: 16,
+    zIndex: 1000,
   },
 
-  editorToolbarLabel: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "500",
+  editorSideToolBtn: {
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 60,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.1)",
   },
 
-  editorToolbarMuted: {
+  editorSideToolText: {
     color: "#fff",
-    fontSize: 13,
-    fontWeight: "500",
-    opacity: 0.65,
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 4,
   },
 
   editorMiniTools: {

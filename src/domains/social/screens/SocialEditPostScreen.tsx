@@ -17,6 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import SocialScreenLayout from "../components/SocialScreenLayout";
@@ -71,6 +72,7 @@ function commentsEnabledFromPost(p: SocialPost | undefined): boolean {
 export default function SocialEditPostScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
   const { postId } = useRoute<R>().params;
 
   const [post, setPost] = useState<SocialPost | undefined>(() => getPostById(postId));
@@ -252,8 +254,15 @@ export default function SocialEditPostScreen() {
   return (
     <SocialScreenLayout title="Gönderiyi düzenle" scroll>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { backgroundColor: T.backgroundColor }]}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            backgroundColor: T.backgroundColor,
+            paddingBottom: insets.bottom + 96,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="always"
       >
         <Text style={[styles.statusLine, { color: T.mutedText }]}>
           Durum: {archived ? "Arşivde" : "Yayında"}

@@ -47,6 +47,7 @@ import {
 } from "../services/socialFeedStateService";
 import {
   addComment,
+  deleteComment,
   getComments,
   subscribeComments,
 } from "../services/socialCommentService";
@@ -139,8 +140,17 @@ export default function SocialPostDetailScreen() {
   const saved = post ? isPostSaved(post.id) : false;
   const liked = post?.likedByMe ?? false;
   const commentsOpen =
+    post?.commentsDisabled !== true &&
     (post?.settings?.commentsEnabled ?? post?.settings?.comments) !== false;
-  const likesVisible = post?.settings?.likesVisible !== false;
+  const likesVisible =
+    post?.likeCountHidden !== true && post?.settings?.likesVisible !== false;
+
+  useEffect(() => {
+    if (post !== undefined) return;
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }, [navigation, post]);
 
   function handleToggleLike() {
     if (!post) return;
@@ -199,6 +209,20 @@ export default function SocialPostDetailScreen() {
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
+  }
+
+  function handleDeleteComment(commentId: string) {
+    if (!post) return;
+    Alert.alert(t("social.postDetail.title"), "Yorumu silmek istiyor musun?", [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: "Sil",
+        style: "destructive",
+        onPress: () => {
+          deleteComment(post.id, commentId);
+        },
+      },
+    ]);
   }
 
   if (!post) {
@@ -420,9 +444,25 @@ export default function SocialPostDetailScreen() {
               },
             ]}
           >
-            <Text style={{ color: T.textColor, fontWeight: "600" }}>
-              {item.username}
-            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <Text style={{ color: T.textColor, fontWeight: "600" }}>
+                {item.username}
+              </Text>
+              {post && (item.userId === getCurrentSocialUserId() || post.userId === getCurrentSocialUserId()) ? (
+                <TouchableOpacity
+                  onPress={() => handleDeleteComment(item.id)}
+                  hitSlop={8}
+                >
+                  <Ionicons name="trash-outline" size={16} color={T.mutedText} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
             <Text style={{ color: T.textColor, marginTop: 2 }}>{item.text}</Text>
           </View>
         )}

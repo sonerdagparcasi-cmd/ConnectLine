@@ -4,6 +4,7 @@
 import type { SocialComment } from "../types/social.types";
 import {
   addComment as addCommentToFeed,
+  deleteComment as deleteCommentFromFeed,
   getComments as getCommentsFromFeed,
   subscribeFeed,
 } from "./socialFeedStateService";
@@ -27,6 +28,10 @@ export function addComment(postId: string, text: string): void {
 
 export function getComments(postId: string): SocialComment[] {
   return getCommentsFromFeed(postId);
+}
+
+export function deleteComment(postId: string, commentId: string): void {
+  deleteCommentFromFeed(postId, commentId);
 }
 
 /** Feed ile aynı olay döngüsü — yorum eklendiğinde tetiklenir. */

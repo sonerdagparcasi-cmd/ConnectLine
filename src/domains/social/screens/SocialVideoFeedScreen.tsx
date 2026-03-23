@@ -20,8 +20,7 @@ import { t } from "../../../shared/i18n/t";
 
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import {
-  getTrendingVideos,
-  subscribeFeed,
+  subscribeReels,
   toggleLike,
 } from "../services/socialFeedStateService";
 
@@ -43,14 +42,11 @@ export default function SocialVideoFeedScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
 
-  const [videos, setVideos] = useState<SocialPost[]>(() =>
-    getTrendingVideos(50)
-  );
+  const [reels, setReels] = useState<SocialPost[]>([]);
 
   useEffect(() => {
-    const sync = () => setVideos(getTrendingVideos(50));
-    sync();
-    return subscribeFeed(sync);
+    const unsubscribe = subscribeReels(setReels);
+    return unsubscribe;
   }, []);
 
   const onViewableItemsChanged = useRef(
@@ -76,6 +72,8 @@ export default function SocialVideoFeedScreen() {
     const isVideo = media?.type === "video";
     const isActive = index === currentIndex;
     const likeColor = T.isDark ? "#1834ae" : "#00bfff";
+    const likeCountHidden =
+      item.likeCountHidden === true || item.settings?.likesVisible === false;
 
     return (
       <View style={styles.item}>
@@ -137,16 +135,18 @@ export default function SocialVideoFeedScreen() {
                   color={item.likedByMe ? likeColor : T.textColor}
                 />
               </View>
-              <Text
-                style={[
-                  styles.actionLabel,
-                  {
-                    color: item.likedByMe ? likeColor : T.textColor,
-                  },
-                ]}
-              >
-                {String(item.likeCount ?? 0)}
-              </Text>
+              {!likeCountHidden ? (
+                <Text
+                  style={[
+                    styles.actionLabel,
+                    {
+                      color: item.likedByMe ? likeColor : T.textColor,
+                    },
+                  ]}
+                >
+                  {String(item.likeCount ?? 0)}
+                </Text>
+              ) : null}
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => openPost(item.id)}
@@ -198,7 +198,7 @@ export default function SocialVideoFeedScreen() {
     );
   }
 
-  if (videos.length === 0) {
+  if (reels.length === 0) {
     return (
       <View style={[styles.empty, { backgroundColor: T.backgroundColor }]}>
         <Ionicons name="videocam-outline" size={64} color={T.mutedText} />
@@ -218,7 +218,7 @@ export default function SocialVideoFeedScreen() {
     <View style={[styles.container, { backgroundColor: T.backgroundColor }]}>
       <FlatList
         ref={listRef}
-        data={videos}
+        data={reels}
         keyExtractor={(p) => p.id}
         renderItem={renderItem}
         pagingEnabled

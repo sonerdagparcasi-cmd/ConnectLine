@@ -17,12 +17,12 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useColorScheme,
-  View,
+  View
 } from "react-native";
 
 import { ChatNotificationBadge } from "../../domains/chat/components/ChatNotificationBadge";
 import { chatService } from "../../domains/chat/services/chatService";
+import { subscribeUnreadCount } from "../../domains/social/services/socialNotificationService";
 import { clearSession } from "../../shared/auth/authSession";
 import { AppThemeProvider } from "../../shared/theme/appTheme";
 import { getColors } from "../../shared/theme/colors";
@@ -67,6 +67,7 @@ export default function AppShell({
 }: Props) {
   const systemDark = true;
   const [manualDark, setManualDark] = useState<boolean | null>(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const isDark = manualDark ?? systemDark;
   const C = useMemo(() => getColors(isDark), [isDark]);
@@ -99,6 +100,11 @@ export default function AppShell({
   useEffect(() => {
     chatService.connectRealtime();
     return () => chatService.disconnectRealtime();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeUnreadCount(setUnreadCount);
+    return unsubscribe;
   }, []);
 
   function handleLogout() {
@@ -157,6 +163,7 @@ export default function AppShell({
             {topTabs.map((tab) => {
               const active = activeTop === tab;
               const isChatTab = tab === "Mesajlar";
+              const isSocialTab = tab === "Sosyal";
               return (
                 <TouchableOpacity
                   key={tab}
@@ -171,15 +178,24 @@ export default function AppShell({
                         : styles.topPillActiveLight),
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.topPillText,
-                      active && styles.topPillTextActive,
-                      { color: textColor },
-                    ]}
-                  >
-                    {tab}
-                  </Text>
+                  <View style={styles.topTabLabelWrap}>
+                    <Text
+                      style={[
+                        styles.topPillText,
+                        active && styles.topPillTextActive,
+                        { color: textColor },
+                      ]}
+                    >
+                      {tab}
+                    </Text>
+                    {isSocialTab && unreadCount > 0 ? (
+                      <View style={styles.socialBadge}>
+                        <Text style={styles.socialBadgeText}>
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                   {isChatTab && chatBadge > 0 && (
                     <ChatNotificationBadge count={chatBadge} />
                   )}
@@ -302,6 +318,26 @@ const styles = StyleSheet.create({
   },
   topPillText: { fontSize: 12, fontWeight: "600" },
   topPillTextActive: { fontWeight: "800" },
+  topTabLabelWrap: {
+    position: "relative",
+  },
+  socialBadge: {
+    position: "absolute",
+    top: -9,
+    right: -18,
+    backgroundColor: "#FF3B30",
+    borderRadius: 10,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  socialBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "400",
+  },
   iconPill: {
     width: 32,
     height: 32,

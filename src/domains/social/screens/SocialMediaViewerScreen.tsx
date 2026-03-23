@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import Reanimated from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { RouteProp } from "@react-navigation/native";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
@@ -26,6 +27,7 @@ type Props = {
 
 export default function SocialMediaViewerScreen({ route }: Props) {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { media, startIndex = 0 } = route.params;
   const safeStartIndex = Math.max(0, Math.min(startIndex, Math.max(0, media.length - 1)));
   const [activeIndex, setActiveIndex] = useState(safeStartIndex);
@@ -72,7 +74,7 @@ export default function SocialMediaViewerScreen({ route }: Props) {
                   resizeMode={ResizeMode.COVER}
                   shouldPlay={index === activeIndex}
                   isLooping
-                  isMuted={true}
+                  isMuted={muted}
                 />
               ) : (
                 <Reanimated.Image source={{ uri: item.uri }} style={styles.media} resizeMode="cover" />
@@ -95,7 +97,13 @@ export default function SocialMediaViewerScreen({ route }: Props) {
       {showUI && media[activeIndex]?.type === "video" ? (
         <TouchableOpacity
           onPress={() => setMuted((p) => !p)}
-          style={styles.soundButton}
+          style={[
+            styles.soundButton,
+            {
+              bottom: insets.bottom + 12,
+              paddingBottom: insets.bottom + 8,
+            },
+          ]}
           activeOpacity={0.8}
         >
           <Ionicons name={muted ? "volume-mute" : "volume-high"} size={20} color="#fff" />
@@ -149,10 +157,11 @@ const styles = StyleSheet.create({
   },
   soundButton: {
     position: "absolute",
-    bottom: 40,
     right: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 10,
-    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    borderRadius: 16,
+    alignItems: "center",
   },
 });

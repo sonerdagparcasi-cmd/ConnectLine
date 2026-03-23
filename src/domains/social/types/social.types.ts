@@ -83,9 +83,24 @@ export type SocialPost = {
 
   /** Yorum / beğeni sayısı görünürlüğü (yoksa varsayılan: açık) */
   settings?: SocialPostShareSettings;
+  commentsDisabled?: boolean;
+  likeCountHidden?: boolean;
 
   /** Video küçük resim kapağı: medya id → saniye (şimdilik 0 = başlangıç) */
   videoCovers?: Record<string, number>;
+
+  overlays?: Array<{
+    id: string;
+    type: "text" | "tag";
+    x: number; // 0-1 (relative)
+    y: number; // 0-1
+    value: string;
+    style?: {
+      color?: string;
+      fontSize?: number;
+      fontWeight?: string;
+    };
+  }>;
 
   /** true ise feed / profil listelerinde gizlenir; mağazada kalır */
   archived?: boolean;

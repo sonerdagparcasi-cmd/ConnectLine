@@ -10,6 +10,7 @@ import Reanimated, {
   withTiming,
 } from "react-native-reanimated";
 import {
+  Alert,
   ActivityIndicator,
   Dimensions,
   FlatList,
@@ -27,12 +28,17 @@ import {
 } from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
+import { t } from "../../../shared/i18n/t";
 import {
+  deletePost,
   getPostById,
   subscribeFeed,
+  toggleComments,
+  toggleLikeVisibility,
   toggleLikePost,
   toggleSavePost,
 } from "../services/socialFeedStateService";
+import { getCurrentSocialUserId } from "../services/socialFollowService";
 import type { SocialMediaItem, SocialPost } from "../types/social.types";
 import SocialEventFeedCard from "./SocialEventFeedCard";
 
@@ -167,6 +173,12 @@ function SocialPostCard({
   const activeMedia = media[activeIndex];
   const liked = !!livePost.likedByMe;
   const saved = !!livePost.savedByMe;
+  const isOwner = livePost.userId === getCurrentSocialUserId();
+  const commentsDisabled =
+    livePost.commentsDisabled === true ||
+    (livePost.settings?.commentsEnabled ?? livePost.settings?.comments) === false;
+  const likeCountHidden =
+    livePost.likeCountHidden === true || livePost.settings?.likesVisible === false;
 
   useEffect(() => {
     setActiveIndex(0);
@@ -293,6 +305,10 @@ function SocialPostCard({
   }
 
   function openComments() {
+    if (commentsDisabled) {
+      Alert.alert(t("social.notifications"), "Comments are disabled");
+      return;
+    }
     if (onPressComments) {
       onPressComments();
       return;
@@ -300,6 +316,31 @@ function SocialPostCard({
     navigation.navigate("SocialPostDetail", {
       postId: livePost.id,
     });
+  }
+
+  function openOwnerMenu() {
+    Alert.alert(t("social.postDetail.title"), "", [
+      {
+        text: t("social.feed.edit"),
+        onPress: () => {
+          navigation.navigate("SocialEditPost", { postId: livePost.id });
+        },
+      },
+      {
+        text: t("social.feed.delete"),
+        style: "destructive",
+        onPress: () => deletePost(livePost.id),
+      },
+      {
+        text: commentsDisabled ? "Enable Comments" : "Disable Comments",
+        onPress: () => toggleComments(livePost.id),
+      },
+      {
+        text: likeCountHidden ? "Show Likes" : "Hide Likes",
+        onPress: () => toggleLikeVisibility(livePost.id),
+      },
+      { text: t("common.cancel"), style: "cancel" },
+    ]);
   }
 
   function setMediaRatio(id: string, ratio: number) {
@@ -631,9 +672,14 @@ function SocialPostCard({
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity activeOpacity={0.8} onPress={onPressMenu}>
-          <Ionicons name="ellipsis-horizontal" size={20} color={T.textColor} />
-        </TouchableOpacity>
+        {isOwner ? (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={onPressMenu ?? openOwnerMenu}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={T.textColor} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.carouselWrap} onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}>
@@ -727,9 +773,17 @@ function SocialPostCard({
               />
             </Reanimated.View>
           </TouchableOpacity>
-          <Reanimated.Text style={[styles.actionCount, { color: liked ? likeColor : T.textColor }, likeCountStyle]}>
-            {likeCount}
-          </Reanimated.Text>
+          {!likeCountHidden ? (
+            <Reanimated.Text
+              style={[
+                styles.actionCount,
+                { color: liked ? likeColor : T.textColor },
+                likeCountStyle,
+              ]}
+            >
+              {likeCount}
+            </Reanimated.Text>
+          ) : null}
         </View>
 
         <View style={styles.actionBtn}>

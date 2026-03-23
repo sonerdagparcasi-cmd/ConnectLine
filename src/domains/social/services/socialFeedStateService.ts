@@ -46,6 +46,9 @@ export type SocialEvent =
       actorUsername?: string;
     }
   | { type: "SAVE" | "UNSAVE"; postId: string; userId: string }
+  | { type: "DELETE_POST"; postId: string }
+  | { type: "EDIT_POST"; postId: string }
+  | { type: "COMMENT_DELETED"; postId: string; commentId: string }
   | {
       type: "STORY_REPLY" | "STORY_REACTION";
       userId: string;
@@ -218,7 +221,7 @@ export function getFeedPosts(): SocialPost[] {
 }
 
 export function getReelsPosts(): SocialPost[] {
-  const posts = filterBlockedAndMutedAuthors(filterPublished(getAllPosts()));
+  const posts = filterBlockedAndMutedAuthors(getAllPosts());
   return posts
     .filter((p) => {
       const isPublic = p.visibility === "public";
@@ -229,6 +232,14 @@ export function getReelsPosts(): SocialPost[] {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+}
+
+export function subscribeReels(listener: (posts: SocialPost[]) => void) {
+  const handler = () => {
+    listener(getReelsPosts());
+  };
+  handler();
+  return subscribeFeed(handler);
 }
 
 /* ------------------------------------------------------------------ */
@@ -458,6 +469,12 @@ export function updateFeedPost(postId: string, patch: Partial<SocialPost>) {
   emit();
 }
 
+export function editPost(postId: string, updates: Partial<SocialPost>) {
+  if (!POST_MAP[postId]) return;
+  updateFeedPost(postId, updates);
+  emitEvent({ type: "EDIT_POST", postId });
+}
+
 export function archiveFeedPost(postId: string) {
   const p = POST_MAP[postId];
   if (!p) return;
@@ -483,6 +500,12 @@ export function removeFeedPost(postId: string) {
 
   invalidateCache();
   emit();
+}
+
+export function deletePost(postId: string) {
+  if (!POST_MAP[postId]) return;
+  removeFeedPost(postId);
+  emitEvent({ type: "DELETE_POST", postId });
 }
 
 /* ------------------------------------------------------------------ */
@@ -582,6 +605,33 @@ export function addComment(
   return newComment;
 }
 
+export function deleteComment(postId: string, commentId: string): void {
+  const post = POST_MAP[postId];
+  if (!post) return;
+
+  const currentUserId = getCurrentSocialUserId();
+  const existing = COMMENTS[postId] ?? [];
+  const target = existing.find((c) => c.id === commentId);
+  if (!target) return;
+
+  const canDelete = target.userId === currentUserId || post.userId === currentUserId;
+  if (!canDelete) return;
+
+  const next = existing.filter((c) => c.id !== commentId);
+  if (next.length === existing.length) return;
+
+  COMMENTS[postId] = next;
+  post.commentCount = Math.max(0, (post.commentCount ?? 0) - 1);
+  post.commentsPreview = next.slice(0, 3);
+  invalidateCache();
+  emit();
+  emitEvent({
+    type: "COMMENT_DELETED",
+    postId,
+    commentId,
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* RESET                                                              */
 /* ------------------------------------------------------------------ */
@@ -631,6 +681,33 @@ export function toggleSavePost(postId: string) {
 
   invalidateCache();
   notifyFeedSubscribers();
+}
+
+export function toggleComments(postId: string) {
+  const post = POST_MAP[postId];
+  if (!post) return;
+  const nextDisabled = !(post.commentsDisabled ?? false);
+  updateFeedPost(postId, {
+    commentsDisabled: nextDisabled,
+    settings: {
+      ...(post.settings ?? {}),
+      comments: !nextDisabled,
+      commentsEnabled: !nextDisabled,
+    },
+  });
+}
+
+export function toggleLikeVisibility(postId: string) {
+  const post = POST_MAP[postId];
+  if (!post) return;
+  const nextHidden = !(post.likeCountHidden ?? false);
+  updateFeedPost(postId, {
+    likeCountHidden: nextHidden,
+    settings: {
+      ...(post.settings ?? {}),
+      likesVisible: !nextHidden,
+    },
+  });
 }
 
 export function isPostSaved(postId: string): boolean {
