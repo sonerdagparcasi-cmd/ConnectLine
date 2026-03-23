@@ -394,6 +394,26 @@ function SocialPostCard({
     }
     lastTap.current = now;
   }
+
+  function handleVideoTap(itemIndex: number) {
+    const now = Date.now();
+    const DOUBLE_PRESS_DELAY = 250;
+    if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+        singleTapTimeoutRef.current = null;
+      }
+      openViewer(itemIndex);
+    } else {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+      }
+      singleTapTimeoutRef.current = setTimeout(() => {
+        setShowControls(true);
+      }, DOUBLE_PRESS_DELAY);
+    }
+    lastTap.current = now;
+  }
   const heartStyle = useAnimatedStyle(() => ({
     opacity: heartOpacity.value,
     transform: [{ scale: heartScale.value }],
@@ -419,7 +439,7 @@ function SocialPostCard({
         style={[styles.mediaPage, { width: screenWidth }]}
         onPress={() => {}}
       >
-        <TouchableWithoutFeedback onPress={handleMediaTap}>
+        <TouchableWithoutFeedback onPress={() => (item.type === "video" ? handleVideoTap(index) : handleMediaTap())}>
           <View style={styles.mediaWrapper}>
           {item.type === "video" ? (
             <Video
