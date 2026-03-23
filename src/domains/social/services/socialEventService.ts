@@ -3,6 +3,7 @@
 // UPDATE:
 // - Event Cover Photo
 // - Event Invite System
+import { emitSocialEvent } from "./socialFeedStateService";
 
 export type SocialEventParticipant = {
   userId: string;
@@ -284,6 +285,14 @@ export const socialEventService = {
     };
 
     mockInvites.unshift(invite);
+    emitSocialEvent({
+      type: "EVENT_INVITE",
+      userId: CURRENT_USER.userId,
+      actorUsername: CURRENT_USER.username,
+      targetUserId: toUserId,
+      eventId: event.id,
+      eventTitle: event.title,
+    });
   },
 
   async getInvitesForUser(userId: string) {

@@ -129,6 +129,7 @@ function SocialPostCard({
   const panRespondersRef = useRef<Record<string, ReturnType<typeof PanResponder.create>>>({});
   const progressWidthsRef = useRef<Record<string, number>>({});
   const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const likeAnimTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTap = useRef(0);
 
   const [, setTick] = useState(0);
@@ -141,10 +142,24 @@ function SocialPostCard({
   const [showControls, setShowControls] = useState(true);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
+  const [showLikeAnim, setShowLikeAnim] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeFeed(() => setTick((n) => n + 1));
     return unsub;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+        singleTapTimeoutRef.current = null;
+      }
+      if (likeAnimTimeoutRef.current) {
+        clearTimeout(likeAnimTimeoutRef.current);
+        likeAnimTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const livePost = getPostById(post.id) ?? post;
@@ -363,55 +378,64 @@ function SocialPostCard({
     return panRespondersRef.current[mediaId];
   }
 
-  function handleMediaTap() {
-    const now = Date.now();
-    const DOUBLE_PRESS_DELAY = 250;
-    if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
-      if (singleTapTimeoutRef.current) {
-        clearTimeout(singleTapTimeoutRef.current);
-        singleTapTimeoutRef.current = null;
-      }
-      if (!liked) {
-        if (onToggleLike) {
-          onToggleLike();
-        } else {
-          toggleLikePost(livePost.id);
-        }
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-
-        heartScale.value = 0.3;
-        heartOpacity.value = 1;
-        heartScale.value = withSequence(
-          withTiming(1.4, { duration: 180 }),
-          withTiming(1, { duration: 120 })
-        );
-        heartOpacity.value = withTiming(0, { duration: 400 });
-        likeScale.value = withSequence(
-          withTiming(1.4, { duration: 120 }),
-          withTiming(1, { duration: 120 })
-        );
-      }
-    }
-    lastTap.current = now;
+  function triggerHaptic() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   }
 
-  function handleVideoTap(itemIndex: number) {
+  function triggerLikeAnimation() {
+    setShowLikeAnim(true);
+    heartScale.value = 0.3;
+    heartOpacity.value = 1;
+    heartScale.value = withSequence(
+      withTiming(1.4, { duration: 180 }),
+      withTiming(1, { duration: 120 })
+    );
+    heartOpacity.value = withTiming(0, { duration: 400 });
+    likeScale.value = withSequence(
+      withTiming(1.4, { duration: 120 }),
+      withTiming(1, { duration: 120 })
+    );
+    if (likeAnimTimeoutRef.current) {
+      clearTimeout(likeAnimTimeoutRef.current);
+    }
+    likeAnimTimeoutRef.current = setTimeout(() => {
+      setShowLikeAnim(false);
+      likeAnimTimeoutRef.current = null;
+    }, 700);
+  }
+
+  function handleDoubleTap() {
+    if (!liked) {
+      if (onToggleLike) {
+        onToggleLike();
+      } else {
+        toggleLikePost(livePost.id);
+      }
+    }
+    triggerLikeAnimation();
+    triggerHaptic();
+  }
+
+  function handleTap(onSingleTap?: () => void) {
     const now = Date.now();
     const DOUBLE_PRESS_DELAY = 250;
+
     if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
       if (singleTapTimeoutRef.current) {
         clearTimeout(singleTapTimeoutRef.current);
         singleTapTimeoutRef.current = null;
       }
-      openViewer(itemIndex);
+      handleDoubleTap();
     } else {
       if (singleTapTimeoutRef.current) {
         clearTimeout(singleTapTimeoutRef.current);
       }
       singleTapTimeoutRef.current = setTimeout(() => {
-        setShowControls(true);
+        onSingleTap?.();
+        singleTapTimeoutRef.current = null;
       }, DOUBLE_PRESS_DELAY);
     }
+
     lastTap.current = now;
   }
   const heartStyle = useAnimatedStyle(() => ({
@@ -439,7 +463,11 @@ function SocialPostCard({
         style={[styles.mediaPage, { width: screenWidth }]}
         onPress={() => {}}
       >
-        <TouchableWithoutFeedback onPress={() => (item.type === "video" ? handleVideoTap(index) : handleMediaTap())}>
+        <TouchableWithoutFeedback
+          onPress={() =>
+            handleTap(item.type === "video" ? () => setShowControls(true) : undefined)
+          }
+        >
           <View style={styles.mediaWrapper}>
           {item.type === "video" ? (
             <Video
@@ -562,9 +590,14 @@ function SocialPostCard({
               <Ionicons name="play" size={24} color="#fff" />
             </Reanimated.View>
           ) : null}
-          <Reanimated.View pointerEvents="none" style={[styles.doubleTapHeartOverlay, heartStyle]}>
-            <Ionicons name="heart" size={90} color="#fff" />
-          </Reanimated.View>
+          {showLikeAnim ? (
+            <Reanimated.View
+              pointerEvents="none"
+              style={[styles.doubleTapHeartOverlay, heartStyle]}
+            >
+              <Ionicons name="heart" size={90} color="#fff" />
+            </Reanimated.View>
+          ) : null}
           </View>
         </TouchableWithoutFeedback>
       </TouchableOpacity>

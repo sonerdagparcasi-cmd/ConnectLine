@@ -8,6 +8,7 @@
 // ARCHITECTURE SAFE
 
 import type { SocialStory } from "../types/social.types";
+import { emitSocialEvent } from "./socialFeedStateService";
 /* ------------------------------------------------------------------ */
 /* TYPES                                                              */
 /* ------------------------------------------------------------------ */
@@ -67,7 +68,8 @@ export function addStoryReply(
   storyId: string,
   senderUserId: string,
   senderUsername: string,
-  message: string
+  message: string,
+  targetUserId?: string
 ) {
   const reply: SocialStoryReply = {
     id: generateId(),
@@ -87,6 +89,13 @@ export function addStoryReply(
   };
 
   emitReplyChange();
+  emitSocialEvent({
+    type: "STORY_REPLY",
+    userId: senderUserId,
+    actorUsername: senderUsername,
+    targetUserId,
+    storyId,
+  });
   return reply;
 }
 
@@ -98,7 +107,8 @@ export function addStoryReaction(
   storyId: string,
   senderUserId: string,
   senderUsername: string,
-  reaction: string
+  reaction: string,
+  targetUserId?: string
 ) {
   const reply: SocialStoryReply = {
     id: generateId(),
@@ -118,6 +128,14 @@ export function addStoryReaction(
   };
 
   emitReplyChange();
+  emitSocialEvent({
+    type: "STORY_REACTION",
+    userId: senderUserId,
+    actorUsername: senderUsername,
+    targetUserId,
+    storyId,
+    reaction,
+  });
   return reply;
 }
 

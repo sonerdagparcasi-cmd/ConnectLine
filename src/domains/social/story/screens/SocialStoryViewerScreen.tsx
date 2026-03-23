@@ -23,7 +23,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { switchTestUser, useSocialProfile } from "../../hooks/useSocialProfile";
 import { sendSocialMessage } from "../../services/socialMessageService";
 import { useAppTheme } from "../../../../shared/theme/appTheme";
-import { addNotification } from "../../services/socialNotificationService";
 import { getCurrentSocialUserId } from "../../services/socialFollowService";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
 import {
@@ -43,6 +42,7 @@ import {
   pushFeedSignal,
 } from "../../services/socialFeedBridgeService";
 import {
+  addStoryReaction,
   addStoryReply,
   getStoryReplyCount,
   subscribeStoryReplies,
@@ -355,19 +355,13 @@ export default function SocialStoryViewerScreen() {
     if (!currentUserId || !current?.id) return;
 
     addReaction(current.id, currentUserId, emoji);
-
-    addNotification({
-      id: `reaction_${Date.now()}`,
-      type: "story_reaction",
-      actorUserId: currentUserId,
-      actorUsername: profile?.username ?? "Sen",
-      actorAvatarUri: profile?.avatarUri ?? null,
-      targetUserId: group.userId,
-      storyId: current.id,
-      text: `${emoji} ile hikayene tepki verdi`,
-      createdAt: new Date().toISOString(),
-      read: false,
-    });
+    addStoryReaction(
+      current.id,
+      currentUserId,
+      profile?.username ?? "Sen",
+      emoji,
+      group.userId
+    );
 
     pushFeedSignal(
       mapStoryToFeedSignal(current, {
@@ -780,7 +774,13 @@ export default function SocialStoryViewerScreen() {
               onPress={() => {
                 const text = reply.trim();
                 if (!text || !currentUserId) return;
-                addStoryReply(story.id, currentUserId, profile?.username ?? "Sen", text);
+                addStoryReply(
+                  story.id,
+                  currentUserId,
+                  profile?.username ?? "Sen",
+                  text,
+                  group.userId
+                );
                 sendSocialMessage({
                   id: `msg_${Date.now()}`,
                   senderId: currentUserId,
@@ -789,18 +789,6 @@ export default function SocialStoryViewerScreen() {
                   type: "story_reply",
                   storyId: story.id,
                   createdAt: new Date().toISOString(),
-                });
-                addNotification({
-                  id: `story_reply_${Date.now()}`,
-                  type: "story_reply",
-                  actorUserId: currentUserId,
-                  actorUsername: profile?.username ?? "Sen",
-                  actorAvatarUri: profile?.avatarUri ?? null,
-                  targetUserId: group.userId,
-                  storyId: story.id,
-                  text: "hikayene yanıt verdi",
-                  createdAt: new Date().toISOString(),
-                  read: false,
                 });
                 pushFeedSignal(
                   mapStoryToFeedSignal(story, {

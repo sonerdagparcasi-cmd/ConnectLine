@@ -14,6 +14,7 @@ import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import {
   applySocialNotificationNavigation,
   getNotifications,
+  markNotificationRead,
   markAllNotificationsRead,
   subscribeNotifications,
 } from "../services/socialNotificationService";
@@ -41,6 +42,7 @@ export default function SocialNotificationsScreen() {
 
   const openRow = useCallback(
     (n: SocialNotification) => {
+      markNotificationRead(n.id);
       if (
         applySocialNotificationNavigation(n, (screen, params) => {
           (navigation as { navigate: (s: string, p?: object) => void }).navigate(

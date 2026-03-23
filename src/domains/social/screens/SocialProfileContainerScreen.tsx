@@ -263,7 +263,6 @@ export default function SocialProfileContainerScreen() {
                       style={styles.textAction}
                       onPress={() => {
                         toggleFollow(profile.userId);
-                        setFollowing(false);
                       }}
                     >
                       <Text style={[styles.baseText, { color: primaryText }]}>Takibi Bırak</Text>
@@ -275,7 +274,6 @@ export default function SocialProfileContainerScreen() {
                     style={styles.textAction}
                     onPress={() => {
                       blockUser(profile.userId);
-                      setBlocked(true);
                       Alert.alert("", "Kullanıcı engellendi");
                     }}
                   >

@@ -3,10 +3,7 @@
 
 import { socialProfileStore } from "../state/socialProfileStore";
 import { MOCK_POSTS } from "./socialMockData";
-import {
-  notifyFollowDirect,
-  notifyFollowRequestReceived,
-} from "./socialNotificationService";
+import { emitSocialEvent, subscribeEvents } from "./socialFeedStateService";
 
 /* ------------------------------------------------------------------ */
 /* CURRENT USER                                                       */
@@ -31,6 +28,21 @@ const BLOCKED_USER_IDS = new Set<string>();
 let MUTED: Set<string> = new Set();
 
 let listeners: Array<() => void> = [];
+
+function updateFollowStats() {
+  socialProfileStore.setFollowingCount(getFollowingCount());
+}
+
+let eventBridgeInitialized = false;
+function ensureEventBridgeInitialized() {
+  if (eventBridgeInitialized) return;
+  eventBridgeInitialized = true;
+  subscribeEvents((event) => {
+    if (event.type === "FOLLOW" || event.type === "UNFOLLOW") {
+      updateFollowStats();
+    }
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /* FOLLOW REQUESTS                                                    */
@@ -78,6 +90,7 @@ export function getSocialDisplayName(userId: string): string {
 /* ------------------------------------------------------------------ */
 
 export function followUser(userId: string) {
+  ensureEventBridgeInitialized();
   if (userId === CURRENT_USER_ID) return;
 
   const wasFollowing = !!FOLLOWING[userId];
@@ -87,27 +100,35 @@ export function followUser(userId: string) {
     [userId]: true,
   };
 
-  socialProfileStore.setFollowingCount(getFollowingCount());
+  updateFollowStats();
   emit();
 
   if (!wasFollowing) {
-    notifyFollowDirect({
-      actorUserId: CURRENT_USER_ID,
-      actorUsername: getSocialDisplayName(CURRENT_USER_ID),
+    emitSocialEvent({
+      type: "FOLLOW",
       targetUserId: userId,
+      userId: CURRENT_USER_ID,
+      actorUsername: getSocialDisplayName(CURRENT_USER_ID),
     });
   }
 }
 
 export function unfollowUser(userId: string) {
+  ensureEventBridgeInitialized();
   const next = { ...FOLLOWING };
 
   delete next[userId];
 
   FOLLOWING = next;
 
-  socialProfileStore.setFollowingCount(getFollowingCount());
+  updateFollowStats();
   emit();
+  emitSocialEvent({
+    type: "UNFOLLOW",
+    targetUserId: userId,
+    userId: CURRENT_USER_ID,
+    actorUsername: getSocialDisplayName(CURRENT_USER_ID),
+  });
 }
 
 export function toggleFollow(userId: string) {
@@ -119,6 +140,7 @@ export function toggleFollow(userId: string) {
 }
 
 export function sendFollowRequest(fromUserId: string, toUserId: string) {
+  ensureEventBridgeInitialized();
   const fromId = resolveSocialUserId(fromUserId);
   const toId = resolveSocialUserId(toUserId);
   if (fromId === toId) return;
@@ -130,10 +152,11 @@ export function sendFollowRequest(fromUserId: string, toUserId: string) {
     createdAt: new Date().toISOString(),
   });
 
-  notifyFollowRequestReceived({
-    actorUserId: fromId,
-    actorUsername: getSocialDisplayName(fromId),
+  emitSocialEvent({
+    type: "FOLLOW_REQUEST",
     targetUserId: toId,
+    userId: fromId,
+    actorUsername: getSocialDisplayName(fromId),
   });
 
   emit();
@@ -257,7 +280,7 @@ export function blockUser(userId: string): void {
   const next = { ...FOLLOWING };
   delete next[userId];
   FOLLOWING = next;
-  socialProfileStore.setFollowingCount(getFollowingCount());
+  updateFollowStats();
   emit();
 }
 
@@ -339,7 +362,9 @@ Ali ve 2 arkadaşın katılıyor
 /* ------------------------------------------------------------------ */
 
 export function subscribeFollow(listener: () => void) {
-  listeners.push(listener);
+  if (!listeners.includes(listener)) {
+    listeners.push(listener);
+  }
 
   return () => {
     listeners = listeners.filter((l) => l !== listener);

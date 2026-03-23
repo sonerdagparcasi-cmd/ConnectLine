@@ -20,9 +20,48 @@ import {
 function filterBlockedAndMutedAuthors(posts: SocialPost[]): SocialPost[] {
   return posts.filter((p) => !isUserBlocked(p.userId) && !isMuted(p.userId));
 }
-import { notifyPostCommented, notifyPostLiked } from "./socialNotificationService";
 import { socialEventService } from "./socialEventService";
 import { getFeedPosts as getBaseFeedPosts } from "./socialFeedService";
+
+export type SocialEvent =
+  | {
+      type: "LIKE" | "UNLIKE";
+      postId: string;
+      userId: string;
+      targetUserId?: string;
+      actorUsername?: string;
+    }
+  | {
+      type: "COMMENT";
+      postId: string;
+      userId: string;
+      targetUserId?: string;
+      actorUsername?: string;
+      commentText?: string;
+    }
+  | {
+      type: "FOLLOW" | "UNFOLLOW" | "FOLLOW_REQUEST";
+      targetUserId: string;
+      userId: string;
+      actorUsername?: string;
+    }
+  | { type: "SAVE" | "UNSAVE"; postId: string; userId: string }
+  | {
+      type: "STORY_REPLY" | "STORY_REACTION";
+      userId: string;
+      targetUserId?: string;
+      actorUsername?: string;
+      storyId?: string;
+      reaction?: string;
+    }
+  | {
+      type: "EVENT_INVITE";
+      userId: string;
+      targetUserId?: string;
+      actorUsername?: string;
+      eventId?: string;
+      eventTitle?: string;
+    };
 
 /* ------------------------------------------------------------------ */
 /* INTERNAL STORE                                                     */
@@ -58,6 +97,7 @@ let COMMENTS: Record<string, SocialComment[]> = {};
 /* ------------------------------------------------------------------ */
 
 let listeners: Array<() => void> = [];
+let eventListeners: Array<(event: SocialEvent) => void> = [];
 
 /* ------------------------------------------------------------------ */
 /* EVENT → POST CONVERTER                                             */
@@ -484,15 +524,13 @@ export function toggleLike(postId: string): void {
   emit();
 
   const me = getCurrentSocialUserId();
-  if (!wasLiked && next.likedByMe && post.userId !== me) {
-    notifyPostLiked({
-      actorUserId: me,
-      actorUsername: getSocialDisplayName(me),
-      actorAvatarUri: null,
-      postOwnerUserId: post.userId,
-      postId,
-    });
-  }
+  emitEvent({
+    type: next.likedByMe ? "LIKE" : "UNLIKE",
+    postId,
+    userId: me,
+    targetUserId: post.userId,
+    actorUsername: getSocialDisplayName(me),
+  });
 }
 
 /** `toggleLike` ile aynı — API uyumluluğu (interaction core). Beğeni bildirimi `toggleLike` içinde `notifyPostLiked`. */
@@ -532,16 +570,14 @@ export function addComment(
   recordCommentAdded(postId);
   emit();
 
-  if (post && comment.userId !== post.userId) {
-    notifyPostCommented({
-      actorUserId: comment.userId,
-      actorUsername: comment.username,
-      actorAvatarUri: null,
-      postOwnerUserId: post.userId,
-      postId,
-      commentText: comment.text,
-    });
-  }
+  emitEvent({
+    type: "COMMENT",
+    postId,
+    userId: comment.userId,
+    targetUserId: post?.userId,
+    actorUsername: comment.username,
+    commentText: comment.text,
+  });
 
   return newComment;
 }
@@ -575,6 +611,7 @@ export function toggleSavedPost(postId: string) {
 export function toggleSavePost(postId: string) {
   const post = POST_MAP[postId];
   if (!post) return;
+  const me = getCurrentSocialUserId();
 
   if (post.savedByMe) {
     POST_MAP[postId] = {
@@ -582,12 +619,14 @@ export function toggleSavePost(postId: string) {
       savedByMe: false,
       saveCount: Math.max(0, (post.saveCount ?? 1) - 1),
     };
+    emitEvent({ type: "UNSAVE", postId, userId: me });
   } else {
     POST_MAP[postId] = {
       ...post,
       savedByMe: true,
       saveCount: (post.saveCount ?? 0) + 1,
     };
+    emitEvent({ type: "SAVE", postId, userId: me });
   }
 
   invalidateCache();
@@ -622,6 +661,19 @@ export function subscribeFeed(listener: () => void) {
   };
 }
 
+export function subscribeEvents(listener: (event: SocialEvent) => void) {
+  if (!eventListeners.includes(listener)) {
+    eventListeners.push(listener);
+  }
+  return () => {
+    eventListeners = eventListeners.filter((l) => l !== listener);
+  };
+}
+
+export function emitSocialEvent(event: SocialEvent) {
+  emitEvent(event);
+}
+
 /* ------------------------------------------------------------------ */
 /* CACHE CONTROL                                                      */
 /* ------------------------------------------------------------------ */
@@ -637,6 +689,10 @@ function invalidateCache() {
 
 function emit() {
   listeners.forEach((l) => l());
+}
+
+function emitEvent(event: SocialEvent) {
+  eventListeners.forEach((l) => l(event));
 }
 
 /** Kayıt / beğeni / feed listesi değişimlerinde UI aboneleri. */

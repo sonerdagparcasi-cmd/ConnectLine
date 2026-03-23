@@ -8,24 +8,28 @@
 // - realtime subscriptions
 
 import type { SocialNotification } from "../types/social.types";
+import { subscribeEvents, type SocialEvent } from "./socialFeedStateService";
 
 /* ------------------------------------------------------------------ */
 /* STORE                                                              */
 /* ------------------------------------------------------------------ */
 
 let NOTIFICATIONS: SocialNotification[] = [];
+const RECENT_DEDUPE = new Map<string, number>();
 
 /* ------------------------------------------------------------------ */
 /* LISTENERS                                                          */
 /* ------------------------------------------------------------------ */
 
 let listeners: Array<() => void> = [];
+let unreadListeners: Array<(count: number) => void> = [];
 
 /* ------------------------------------------------------------------ */
 /* CONFIG                                                             */
 /* ------------------------------------------------------------------ */
 
 const MAX_NOTIFICATIONS = 200;
+const DEDUPE_WINDOW_MS = 2500;
 
 /* ------------------------------------------------------------------ */
 /* GET                                                                */
@@ -52,12 +56,47 @@ export function getUnreadCount(): number {
   return getUnreadNotificationCount();
 }
 
+function notificationDedupeKey(notification: SocialNotification): string {
+  return [
+    notification.type,
+    notification.actorUserId,
+    notification.targetUserId,
+    notification.targetPostId ?? notification.postId ?? "",
+    notification.storyId ?? "",
+    notification.eventId ?? "",
+    notification.text,
+  ].join("|");
+}
+
+function cleanupOldDedupeEntries(now: number): void {
+  RECENT_DEDUPE.forEach((ts, key) => {
+    if (now - ts > DEDUPE_WINDOW_MS) {
+      RECENT_DEDUPE.delete(key);
+    }
+  });
+}
+
+function shouldDedupe(notification: SocialNotification): boolean {
+  const now = Date.now();
+  cleanupOldDedupeEntries(now);
+  const key = notificationDedupeKey(notification);
+  const last = RECENT_DEDUPE.get(key);
+  if (typeof last === "number" && now - last <= DEDUPE_WINDOW_MS) {
+    return true;
+  }
+  RECENT_DEDUPE.set(key, now);
+  return false;
+}
+
 /* ------------------------------------------------------------------ */
 /* ADD                                                                */
 /* ------------------------------------------------------------------ */
 
 export function addNotification(notification: SocialNotification) {
   if (!notification?.id) return;
+  if (!notification.targetUserId) return;
+  if (notification.actorUserId === notification.targetUserId) return;
+  if (shouldDedupe(notification)) return;
 
   const exists = NOTIFICATIONS.some((n) => n.id === notification.id);
 
@@ -81,7 +120,14 @@ export function addNotifications(list: SocialNotification[]) {
 
   const existingIds = new Set(NOTIFICATIONS.map((n) => n.id));
 
-  const next = list.filter((n) => !existingIds.has(n.id));
+  const next = list.filter((n) => {
+    if (!n?.id) return false;
+    if (!n.targetUserId) return false;
+    if (n.actorUserId === n.targetUserId) return false;
+    if (existingIds.has(n.id)) return false;
+    if (shouldDedupe(n)) return false;
+    return true;
+  });
 
   if (next.length === 0) return;
 
@@ -103,6 +149,125 @@ function nextNotificationId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function safeNotify(input: Omit<SocialNotification, "id" | "createdAt" | "read">) {
+  addNotification({
+    ...input,
+    id: nextNotificationId(input.type),
+    createdAt: new Date().toISOString(),
+    read: false,
+  });
+}
+
+function buildNotificationFromEvent(event: SocialEvent): SocialNotification | null {
+  if (event.type === "LIKE") {
+    if (!event.targetUserId || !event.postId) return null;
+    return {
+      id: nextNotificationId("like"),
+      type: "like",
+      actorUserId: event.userId,
+      actorUsername: event.actorUsername ?? event.userId,
+      actorAvatarUri: null,
+      targetUserId: event.targetUserId,
+      postId: event.postId,
+      targetPostId: event.postId,
+      text: "paylasimini begendi",
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+  }
+  if (event.type === "COMMENT") {
+    if (!event.targetUserId || !event.postId) return null;
+    const trimmed = (event.commentText ?? "").trim();
+    const snippet = trimmed.slice(0, 72);
+    const ell = trimmed.length > 72 ? "..." : "";
+    return {
+      id: nextNotificationId("comment"),
+      type: "comment",
+      actorUserId: event.userId,
+      actorUsername: event.actorUsername ?? event.userId,
+      actorAvatarUri: null,
+      targetUserId: event.targetUserId,
+      postId: event.postId,
+      targetPostId: event.postId,
+      text: snippet ? `yorum yapti: "${snippet}${ell}"` : "yorum yapti",
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+  }
+  if (event.type === "FOLLOW") {
+    return {
+      id: nextNotificationId("follow"),
+      type: "follow",
+      actorUserId: event.userId,
+      actorUsername: event.actorUsername ?? event.userId,
+      actorAvatarUri: null,
+      targetUserId: event.targetUserId,
+      text: "seni takip etti",
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+  }
+  if (event.type === "FOLLOW_REQUEST") {
+    return {
+      id: nextNotificationId("follow_request"),
+      type: "follow_request",
+      actorUserId: event.userId,
+      actorUsername: event.actorUsername ?? event.userId,
+      actorAvatarUri: null,
+      targetUserId: event.targetUserId,
+      text: "sana takip istegi gonderdi",
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+  }
+  if (event.type === "STORY_REPLY") {
+    if (!event.targetUserId) return null;
+    return {
+      id: nextNotificationId("story_reply"),
+      type: "story_reply",
+      actorUserId: event.userId,
+      actorUsername: event.actorUsername ?? event.userId,
+      actorAvatarUri: null,
+      targetUserId: event.targetUserId,
+      storyId: event.storyId,
+      text: "hikayene yanit verdi",
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+  }
+  if (event.type === "STORY_REACTION") {
+    if (!event.targetUserId) return null;
+    return {
+      id: nextNotificationId("story_reaction"),
+      type: "story_reaction",
+      actorUserId: event.userId,
+      actorUsername: event.actorUsername ?? event.userId,
+      actorAvatarUri: null,
+      targetUserId: event.targetUserId,
+      storyId: event.storyId,
+      text: `${event.reaction ?? ""} ile hikayene tepki verdi`,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+  }
+  if (event.type === "EVENT_INVITE") {
+    if (!event.targetUserId) return null;
+    return {
+      id: nextNotificationId("event_invite"),
+      type: "event_invite",
+      actorUserId: event.userId,
+      actorUsername: event.actorUsername ?? event.userId,
+      actorAvatarUri: null,
+      targetUserId: event.targetUserId,
+      eventId: event.eventId,
+      text: `${event.eventTitle ?? "etkinlik"} etkinligine davet etti`,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+  }
+  return null;
+}
+
 /** Beğeni — gönderi sahibine (kendi gönderini beğenmez) */
 export function notifyPostLiked(input: {
   actorUserId: string;
@@ -113,8 +278,7 @@ export function notifyPostLiked(input: {
 }) {
   if (input.actorUserId === input.postOwnerUserId) return;
 
-  addNotification({
-    id: nextNotificationId("like"),
+  safeNotify({
     type: "like",
     actorUserId: input.actorUserId,
     actorUsername: input.actorUsername,
@@ -123,8 +287,6 @@ export function notifyPostLiked(input: {
     postId: input.postId,
     targetPostId: input.postId,
     text: "paylaşımını beğendi",
-    createdAt: new Date().toISOString(),
-    read: false,
   });
 }
 
@@ -142,8 +304,7 @@ export function notifyPostCommented(input: {
   const snippet = input.commentText.trim().slice(0, 72);
   const ell = input.commentText.trim().length > 72 ? "…" : "";
 
-  addNotification({
-    id: nextNotificationId("comment"),
+  safeNotify({
     type: "comment",
     actorUserId: input.actorUserId,
     actorUsername: input.actorUsername,
@@ -152,8 +313,6 @@ export function notifyPostCommented(input: {
     postId: input.postId,
     targetPostId: input.postId,
     text: snippet ? `yorum yaptı: "${snippet}${ell}"` : "yorum yaptı",
-    createdAt: new Date().toISOString(),
-    read: false,
   });
 }
 
@@ -166,16 +325,13 @@ export function notifyFollowDirect(input: {
 }) {
   if (input.actorUserId === input.targetUserId) return;
 
-  addNotification({
-    id: nextNotificationId("follow"),
+  safeNotify({
     type: "follow",
     actorUserId: input.actorUserId,
     actorUsername: input.actorUsername,
     actorAvatarUri: input.actorAvatarUri ?? null,
     targetUserId: input.targetUserId,
     text: "seni takip etti",
-    createdAt: new Date().toISOString(),
-    read: false,
   });
 }
 
@@ -188,16 +344,13 @@ export function notifyFollowRequestReceived(input: {
 }) {
   if (input.actorUserId === input.targetUserId) return;
 
-  addNotification({
-    id: nextNotificationId("freq"),
+  safeNotify({
     type: "follow_request",
     actorUserId: input.actorUserId,
     actorUsername: input.actorUsername,
     actorAvatarUri: input.actorAvatarUri ?? null,
     targetUserId: input.targetUserId,
     text: "sana takip isteği gönderdi",
-    createdAt: new Date().toISOString(),
-    read: false,
   });
 }
 
@@ -220,6 +373,10 @@ export function markNotificationRead(notificationId: string) {
   if (changed) notify();
 }
 
+export function markRead(notificationId: string) {
+  markNotificationRead(notificationId);
+}
+
 /* ------------------------------------------------------------------ */
 /* MARK ALL READ                                                      */
 /* ------------------------------------------------------------------ */
@@ -237,6 +394,10 @@ export function markAllNotificationsRead() {
   });
 
   if (changed) notify();
+}
+
+export function markAllRead() {
+  markAllNotificationsRead();
 }
 
 /* ------------------------------------------------------------------ */
@@ -279,6 +440,17 @@ export function subscribeNotifications(listener: () => void) {
   };
 }
 
+export function subscribeUnreadCount(listener: (count: number) => void) {
+  if (!unreadListeners.includes(listener)) {
+    unreadListeners.push(listener);
+  }
+  listener(getUnreadNotificationCount());
+
+  return () => {
+    unreadListeners = unreadListeners.filter((l) => l !== listener);
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* NAVIGATION (UI: navigate callback ile çağır)                        */
 /* ------------------------------------------------------------------ */
@@ -310,4 +482,12 @@ export function applySocialNotificationNavigation(
 
 function notify() {
   listeners.forEach((l) => l());
+  const unread = getUnreadNotificationCount();
+  unreadListeners.forEach((l) => l(unread));
 }
+
+subscribeEvents((event) => {
+  const notification = buildNotificationFromEvent(event);
+  if (!notification) return;
+  addNotification(notification);
+});

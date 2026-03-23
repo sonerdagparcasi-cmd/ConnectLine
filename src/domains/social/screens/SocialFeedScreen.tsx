@@ -17,7 +17,7 @@ import SocialPostCard from "../components/SocialPostCard";
 import SocialPostSkeleton from "../components/SocialPostSkeleton";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import { getFeedPosts, subscribeFeed } from "../services/socialFeedStateService";
-import { isMuted, isUserBlocked, subscribeFollow } from "../services/socialFollowService";
+import { subscribeFollow } from "../services/socialFollowService";
 import type { SocialPost } from "../types/social.types";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
@@ -59,10 +59,7 @@ export default function SocialFeedScreen() {
     };
   }, []);
 
-  const visiblePosts = useMemo(
-    () => posts.filter((p) => !isUserBlocked(p.userId) && !isMuted(p.userId)),
-    [posts]
-  );
+  const visiblePosts = useMemo(() => posts, [posts]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

@@ -8,10 +8,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
-import {
-  getUnreadCount,
-  subscribeNotifications,
-} from "../services/socialNotificationService";
+import { subscribeUnreadCount } from "../services/socialNotificationService";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
 
@@ -21,10 +18,10 @@ type Props = {
 
 export default function SocialNotificationBell({ iconColor }: Props) {
   const navigation = useNavigation<Nav>();
-  const [count, setCount] = useState(() => getUnreadCount());
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    const unsub = subscribeNotifications(() => setCount(getUnreadCount()));
+    const unsub = subscribeUnreadCount(setUnreadCount);
     return unsub;
   }, []);
 
@@ -36,9 +33,9 @@ export default function SocialNotificationBell({ iconColor }: Props) {
       style={styles.wrap}
     >
       <Ionicons name="notifications-outline" size={22} color={iconColor} />
-      {count > 0 ? (
+      {unreadCount > 0 ? (
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>{count > 99 ? "99+" : count}</Text>
+          <Text style={styles.badgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
         </View>
       ) : null}
     </TouchableOpacity>
