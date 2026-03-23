@@ -57,13 +57,12 @@ export default function SocialMediaViewerScreen({ route }: Props) {
   }
 
   const pinch = Gesture.Pinch()
+    .enabled(media[activeIndex]?.type === "image")
     .onUpdate((e) => {
       scale.value = Math.max(1, e.scale);
     })
     .onEnd(() => {
-      if (scale.value < 1) {
-        scale.value = withTiming(1);
-      }
+      scale.value = withTiming(1);
     });
 
   const pan = Gesture.Pan()
@@ -71,7 +70,7 @@ export default function SocialMediaViewerScreen({ route }: Props) {
       translateY.value = e.translationY;
     })
     .onEnd((e) => {
-      if (e.translationY > 120) {
+      if (e.translationY > 150) {
         runOnJS(closeViewer)();
       } else {
         translateY.value = withTiming(0);

@@ -3,7 +3,6 @@ import { useNavigation } from "@react-navigation/native";
 import { ResizeMode, Video, type AVPlaybackStatus } from "expo-av";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
@@ -38,6 +37,7 @@ import type { SocialMediaItem, SocialPost } from "../types/social.types";
 import SocialEventFeedCard from "./SocialEventFeedCard";
 
 const AnimatedImage = Reanimated.createAnimatedComponent(Image);
+const screenWidth = Dimensions.get("window").width;
 
 type Props = {
   post: SocialPost;
@@ -93,57 +93,14 @@ function ZoomableImage({
   ratio: number;
   onLoad: (e: { nativeEvent: { source: { width: number; height: number } } }) => void;
 }) {
-  const scale = useSharedValue(1);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const baseScale = useSharedValue(1);
-
-  const pinch = Gesture.Pinch()
-    .onStart(() => {
-      baseScale.value = scale.value;
-    })
-    .onUpdate((e) => {
-      const next = baseScale.value * e.scale;
-      scale.value = Math.max(1, Math.min(next, 4));
-    })
-    .onEnd(() => {
-      if (scale.value < 1.01) {
-        scale.value = withTiming(1, { duration: 180 });
-        translateX.value = withTiming(0, { duration: 180 });
-        translateY.value = withTiming(0, { duration: 180 });
-      }
-    });
-
-  const pan = Gesture.Pan()
-    .onUpdate((e) => {
-      if (scale.value <= 1) return;
-      translateX.value = e.translationX;
-      translateY.value = e.translationY;
-    })
-    .onEnd(() => {
-      translateX.value = withTiming(0, { duration: 180 });
-      translateY.value = withTiming(0, { duration: 180 });
-    });
-
-  const composed = Gesture.Simultaneous(pinch, pan);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-    ],
-  }));
-
   return (
-    <GestureDetector gesture={composed}>
-      <AnimatedImage
-        source={{ uri }}
-        style={[styles.media, { aspectRatio: ratio }, animatedStyle]}
-        resizeMode="contain"
-        onLoad={onLoad}
-      />
-    </GestureDetector>
+    <AnimatedImage
+      source={{ uri }}
+      style={[styles.media, { width: screenWidth, height: screenWidth * ratio }]}
+      resizeMode="contain"
+      fadeDuration={0}
+      onLoad={onLoad}
+    />
   );
 }
 
@@ -176,6 +133,7 @@ function SocialPostCard({
 
   const [, setTick] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [ratio, setRatio] = useState(1);
   const [carouselWidth, setCarouselWidth] = useState(0);
   const [mediaRatios, setMediaRatios] = useState<Record<string, number>>({});
   const [bufferingById, setBufferingById] = useState<Record<string, boolean>>({});
@@ -191,6 +149,7 @@ function SocialPostCard({
 
   const livePost = getPostById(post.id) ?? post;
   const media = livePost.media ?? [];
+  const activeMedia = media[activeIndex];
   const liked = !!livePost.likedByMe;
   const saved = !!livePost.savedByMe;
 
@@ -214,6 +173,26 @@ function SocialPostCard({
     }, 2500);
     return () => clearTimeout(t);
   }, [showControls]);
+
+  useEffect(() => {
+    const nextMedia = media[activeIndex + 1];
+    if (nextMedia) {
+      Image.prefetch(nextMedia.uri).catch(() => {});
+    }
+  }, [activeIndex, media]);
+
+  useEffect(() => {
+    if (!activeMedia?.uri) return;
+    Image.getSize(
+      activeMedia.uri,
+      (w, h) => {
+        if (w && h) {
+          setRatio(h / w);
+        }
+      },
+      () => {}
+    );
+  }, [activeMedia?.uri]);
 
   useEffect(() => {
     const activeMedia = media[activeIndex];
@@ -246,9 +225,6 @@ function SocialPostCard({
   const commentCount = livePost.commentCount ?? 0;
   const saveCount = (livePost as SocialPost & { saveCount?: number }).saveCount ?? 0;
   const shareCount = (livePost as SocialPost & { shareCount?: number }).shareCount ?? 0;
-  const activeMedia = media[activeIndex];
-  const activeRatio = activeMedia ? (mediaRatios[activeMedia.id] ?? 1) : 1;
-
   function handleMomentumEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
     if (!carouselWidth) return;
     const next = Math.round(e.nativeEvent.contentOffset.x / carouselWidth);
@@ -415,10 +391,6 @@ function SocialPostCard({
           withTiming(1, { duration: 120 })
         );
       }
-    } else {
-      singleTapTimeoutRef.current = setTimeout(() => {
-        toggleControls();
-      }, DOUBLE_PRESS_DELAY);
     }
     lastTap.current = now;
   }
@@ -438,25 +410,31 @@ function SocialPostCard({
   }));
 
   function renderMedia({ item, index }: { item: SocialMediaItem; index: number }) {
-    const pageWidth = carouselWidth || 1;
     const shouldPlay = item.type === "video" && isActive && index === activeIndex;
-    const itemRatio = mediaRatios[item.id] ?? 1;
     const isBuffering = bufferingById[item.id] ?? false;
+    const itemRatio = mediaRatios[item.id] ? 1 / mediaRatios[item.id] : ratio;
     return (
       <TouchableOpacity
         activeOpacity={0.95}
-        style={[styles.mediaPage, { width: pageWidth }]}
+        style={[styles.mediaPage, { width: screenWidth }]}
         onPress={() => {}}
       >
         <TouchableWithoutFeedback onPress={handleMediaTap}>
-          <View style={[styles.mediaWrapper, { aspectRatio: itemRatio }]}>
+          <View style={styles.mediaWrapper}>
           {item.type === "video" ? (
             <Video
               ref={(ref) => {
                 videoRefs.current[item.id] = ref;
               }}
               source={{ uri: item.uri }}
-              style={[styles.media, { aspectRatio: itemRatio, backgroundColor: "#000" }]}
+              style={[
+                styles.media,
+                {
+                  width: screenWidth,
+                  height: screenWidth * itemRatio,
+                  backgroundColor: "#000",
+                },
+              ]}
               resizeMode={ResizeMode.CONTAIN}
               shouldPlay={shouldPlay}
               isLooping
@@ -483,24 +461,16 @@ function SocialPostCard({
               }}
             />
           ) : (
-            <>
-              <Image
-                source={{ uri: item.uri }}
-                style={styles.blurBackground}
-                blurRadius={20}
-                resizeMode="cover"
-              />
-              <ZoomableImage
-                uri={item.uri}
-                ratio={itemRatio}
-                onLoad={(e) => {
-                  const { width, height } = e.nativeEvent.source;
-                  if (width && height) {
-                    setMediaRatio(item.id, width / height);
-                  }
-                }}
-              />
-            </>
+            <ZoomableImage
+              uri={item.uri}
+              ratio={itemRatio}
+              onLoad={(e) => {
+                const { width, height } = e.nativeEvent.source;
+                if (width && height) {
+                  setMediaRatio(item.id, width / height);
+                }
+              }}
+            />
           )}
           {item.type === "video" && isBuffering ? (
             <View style={styles.bufferIndicator}>
@@ -613,19 +583,18 @@ function SocialPostCard({
         </TouchableOpacity>
       </View>
 
-      <View
-        style={[styles.carouselWrap, { aspectRatio: activeRatio }]}
-        onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}
-      >
+      <View style={styles.carouselWrap} onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}>
         {media.length > 0 ? (
           <FlatList
             ref={mediaRef}
             data={media}
             horizontal
+            scrollEnabled={true}
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             initialNumToRender={2}
-            windowSize={3}
+            windowSize={5}
+            removeClippedSubviews
             keyExtractor={(item) => item.id}
             renderItem={renderMedia}
             onMomentumScrollEnd={handleMomentumEnd}
@@ -798,7 +767,6 @@ const styles = StyleSheet.create({
   },
   carouselWrap: {
     width: "100%",
-    maxHeight: 500,
     backgroundColor: "#000",
   },
   mediaPage: {
@@ -806,15 +774,8 @@ const styles = StyleSheet.create({
   },
   mediaWrapper: {
     width: "100%",
-    maxHeight: 500,
     overflow: "hidden",
     backgroundColor: "#000",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  blurBackground: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.25,
   },
   media: {
     width: "100%",
