@@ -48,12 +48,6 @@ let HAS_MORE = true;
 let LOADING = false;
 
 /* ------------------------------------------------------------------ */
-/* SAVED POSTS                                                        */
-/* ------------------------------------------------------------------ */
-
-const SAVED_POST_IDS = new Set<string>();
-
-/* ------------------------------------------------------------------ */
 /* COMMENTS (per post)                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -446,7 +440,6 @@ export function removeFeedPost(postId: string) {
   delete POST_MAP[postId];
   POST_ORDER = POST_ORDER.filter((id) => id !== postId);
   delete COMMENTS[postId];
-  SAVED_POST_IDS.delete(postId);
 
   invalidateCache();
   emit();
@@ -580,23 +573,36 @@ export function toggleSavedPost(postId: string) {
 }
 
 export function toggleSavePost(postId: string) {
-  if (SAVED_POST_IDS.has(postId)) {
-    SAVED_POST_IDS.delete(postId);
+  const post = POST_MAP[postId];
+  if (!post) return;
+
+  if (post.savedByMe) {
+    POST_MAP[postId] = {
+      ...post,
+      savedByMe: false,
+      saveCount: Math.max(0, (post.saveCount ?? 1) - 1),
+    };
   } else {
-    SAVED_POST_IDS.add(postId);
+    POST_MAP[postId] = {
+      ...post,
+      savedByMe: true,
+      saveCount: (post.saveCount ?? 0) + 1,
+    };
   }
+
+  invalidateCache();
   notifyFeedSubscribers();
 }
 
 export function isPostSaved(postId: string): boolean {
-  return SAVED_POST_IDS.has(postId);
+  return !!POST_MAP[postId]?.savedByMe;
 }
 
 export function getSavedPosts(): SocialPost[] {
   return filterBlockedAndMutedAuthors(
     filterPublished(
       POST_ORDER.map((id) => POST_MAP[id]).filter(
-        (p) => SAVED_POST_IDS.has(p.id) && !p.archived
+        (p) => !!p.savedByMe && !p.archived
       )
     )
   );

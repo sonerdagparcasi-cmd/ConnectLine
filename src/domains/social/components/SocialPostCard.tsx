@@ -1,19 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { ResizeMode, Video, type AVPlaybackStatus } from "expo-av";
+import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import {
   ActivityIndicator,
-  Animated,
   FlatList,
   Image,
-  type GestureResponderEvent,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -26,7 +27,6 @@ import {
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import {
   getPostById,
-  isPostSaved,
   subscribeFeed,
   toggleLikePost,
   toggleSavePost,
@@ -159,12 +159,11 @@ function SocialPostCard({
   const T = useAppTheme();
   const navigation = useNavigation<any>();
   const likeColor = T.isDark ? "#1834ae" : "#00bfff";
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const heartAnim = useRef(new Animated.Value(0)).current;
+  const heartScale = useSharedValue(0);
+  const heartOpacity = useSharedValue(0);
+  const likeScale = useSharedValue(1);
   const videoRefs = useRef<Record<string, Video | null>>({});
-  const videoRef = useRef<Video | null>(null);
   const lastTap = useRef(0);
-  const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [, setTick] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -181,7 +180,7 @@ function SocialPostCard({
   const livePost = getPostById(post.id) ?? post;
   const media = livePost.media ?? [];
   const liked = !!livePost.likedByMe;
-  const saved = isPostSaved(livePost.id);
+  const saved = !!livePost.savedByMe;
 
   useEffect(() => {
     setActiveIndex(0);
@@ -191,7 +190,6 @@ function SocialPostCard({
     const activeMedia = media[activeIndex];
     if (!activeMedia || activeMedia.type !== "video") return;
     const activeVideoRef = videoRefs.current[activeMedia.id];
-    videoRef.current = activeVideoRef;
     if (!activeVideoRef) return;
     if (!isActive) {
       activeVideoRef.pauseAsync().catch(() => {});
@@ -199,12 +197,6 @@ function SocialPostCard({
       activeVideoRef.playAsync().catch(() => {});
     }
   }, [activeIndex, isActive, media]);
-
-  useEffect(() => {
-    return () => {
-      if (singleTapTimeoutRef.current) clearTimeout(singleTapTimeoutRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     if (!shouldPreload) return;
@@ -241,34 +233,29 @@ function SocialPostCard({
     } else {
       toggleLikePost(livePost.id);
     }
-
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 1.3,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    heartAnim.setValue(0);
-    Animated.timing(heartAnim, {
-      toValue: 1,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
   }
 
-  function onSavePress() {
+  function handleSave() {
     if (onToggleSave) {
       onToggleSave();
       return;
     }
     toggleSavePost(livePost.id);
+  }
+
+  async function handleShare() {
+    if (onPressShare) {
+      onPressShare();
+      return;
+    }
+    try {
+      await Share.share({
+        message: `${livePost.caption || ""}\n\nConnectLine`,
+        url: livePost.media?.[0]?.uri,
+      });
+    } catch {
+      // no-op
+    }
   }
 
   function openComments() {
@@ -286,49 +273,61 @@ function SocialPostCard({
     setMediaRatios((prev) => (prev[id] === ratio ? prev : { ...prev, [id]: ratio }));
   }
 
-  async function seekBy(seconds: number) {
-    if (!videoRef.current) return;
-    const status = await videoRef.current.getStatusAsync();
+  function toggleSound() {
+    setMuted((prev) => !prev);
+  }
+
+  async function seekBy(mediaId: string, seconds: number) {
+    const ref = videoRefs.current[mediaId];
+    if (!ref) return;
+    const status = await ref.getStatusAsync();
     if (!status.isLoaded) return;
     let newPos = status.positionMillis + seconds * 1000;
     if (newPos < 0) newPos = 0;
-    await videoRef.current.setPositionAsync(newPos);
+    await ref.setPositionAsync(newPos);
   }
 
-  function handleDoubleTap(e: GestureResponderEvent) {
-    const activeMedia = media[activeIndex];
-    if (!activeMedia || activeMedia.type !== "video" || !videoRef.current) return;
-    const { locationX } = e.nativeEvent;
-    const width = carouselWidth || e.nativeEvent.locationX * 2 || 1;
-    const leftZone = width * 0.3;
-    const rightZone = width * 0.7;
-    if (locationX < leftZone) {
-      seekBy(-10).catch(() => {});
-    } else if (locationX > rightZone) {
-      seekBy(10).catch(() => {});
-    } else {
-      videoRef.current.presentFullscreenPlayer().catch(() => {});
-    }
+  function openFullscreen(mediaId: string) {
+    videoRefs.current[mediaId]?.presentFullscreenPlayer().catch(() => {});
   }
 
-  function handleTap(e: GestureResponderEvent) {
-    const activeMedia = media[activeIndex];
-    if (!activeMedia || activeMedia.type !== "video") return;
+  function handleMediaTap() {
     const now = Date.now();
     const DOUBLE_PRESS_DELAY = 250;
     if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
-      if (singleTapTimeoutRef.current) {
-        clearTimeout(singleTapTimeoutRef.current);
-        singleTapTimeoutRef.current = null;
+      if (!liked) {
+        if (onToggleLike) {
+          onToggleLike();
+        } else {
+          toggleLikePost(livePost.id);
+        }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+        heartScale.value = 0.3;
+        heartOpacity.value = 1;
+        heartScale.value = withSequence(
+          withTiming(1.4, { duration: 180 }),
+          withTiming(1, { duration: 120 })
+        );
+        heartOpacity.value = withTiming(0, { duration: 400 });
+        likeScale.value = withSequence(
+          withTiming(1.4, { duration: 120 }),
+          withTiming(1, { duration: 120 })
+        );
       }
-      handleDoubleTap(e);
-    } else {
-      singleTapTimeoutRef.current = setTimeout(() => {
-        setMuted((prev) => !prev);
-      }, DOUBLE_PRESS_DELAY);
     }
     lastTap.current = now;
   }
+  const heartStyle = useAnimatedStyle(() => ({
+    opacity: heartOpacity.value,
+    transform: [{ scale: heartScale.value }],
+  }));
+  const likeIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: likeScale.value }],
+  }));
+  const likeCountStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + (likeScale.value - 1) * 0.5 }],
+  }));
 
   function renderMedia({ item, index }: { item: SocialMediaItem; index: number }) {
     const pageWidth = carouselWidth || 1;
@@ -339,51 +338,40 @@ function SocialPostCard({
       <TouchableOpacity
         activeOpacity={0.95}
         style={[styles.mediaPage, { width: pageWidth }]}
-        onPress={() => onPressMedia?.(index)}
+        onPress={() => {}}
       >
-        <View style={[styles.mediaWrapper, { aspectRatio: itemRatio }]}>
+        <TouchableWithoutFeedback onPress={handleMediaTap}>
+          <View style={[styles.mediaWrapper, { aspectRatio: itemRatio }]}>
           {item.type === "video" ? (
-            <TouchableWithoutFeedback onPress={handleTap}>
-              <View style={styles.videoTouchWrap}>
-                <Video
-                  ref={(ref) => {
-                    videoRefs.current[item.id] = ref;
-                    if (shouldPlay) videoRef.current = ref;
-                  }}
-                  source={{ uri: item.uri }}
-                  style={[styles.media, { aspectRatio: itemRatio, backgroundColor: "#000" }]}
-                  resizeMode={ResizeMode.CONTAIN}
-                  shouldPlay={shouldPlay}
-                  isLooping
-                  isMuted={muted}
-                  useNativeControls={false}
-                  posterSource={{ uri: item.uri }}
-                  usePoster
-                  onLoad={(status: AVPlaybackStatus) => {
-                    if (!status.isLoaded) return;
-                    const width = status.naturalSize?.width;
-                    const height = status.naturalSize?.height;
-                    if (width && height) {
-                      setMediaRatio(item.id, width / height);
-                    }
-                  }}
-                  onPlaybackStatusUpdate={(status) => {
-                    if (!status.isLoaded) return;
-                    const next = !!status.isBuffering;
-                    setBufferingById((prev) =>
-                      prev[item.id] === next ? prev : { ...prev, [item.id]: next }
-                    );
-                  }}
-                />
-                <View style={styles.soundBadge}>
-                  <Ionicons
-                    name={muted ? "volume-mute" : "volume-high"}
-                    size={18}
-                    color="#fff"
-                  />
-                </View>
-              </View>
-            </TouchableWithoutFeedback>
+            <Video
+              ref={(ref) => {
+                videoRefs.current[item.id] = ref;
+              }}
+              source={{ uri: item.uri }}
+              style={[styles.media, { aspectRatio: itemRatio, backgroundColor: "#000" }]}
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay={shouldPlay}
+              isLooping
+              isMuted={muted}
+              useNativeControls={false}
+              posterSource={{ uri: item.uri }}
+              usePoster
+              onLoad={(status: AVPlaybackStatus) => {
+                if (!status.isLoaded) return;
+                const width = status.naturalSize?.width;
+                const height = status.naturalSize?.height;
+                if (width && height) {
+                  setMediaRatio(item.id, width / height);
+                }
+              }}
+              onPlaybackStatusUpdate={(status) => {
+                if (!status.isLoaded) return;
+                const next = !!status.isBuffering;
+                setBufferingById((prev) =>
+                  prev[item.id] === next ? prev : { ...prev, [item.id]: next }
+                );
+              }}
+            />
           ) : (
             <>
               <Image
@@ -409,7 +397,41 @@ function SocialPostCard({
               <ActivityIndicator size="small" color="#fff" />
             </View>
           ) : null}
-        </View>
+          {item.type === "video" ? (
+            <View style={styles.videoControlsBar}>
+              <TouchableOpacity activeOpacity={0.8} onPress={toggleSound}>
+                <Ionicons
+                  name={muted ? "volume-mute" : "volume-high"}
+                  size={18}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  seekBy(item.id, -10).catch(() => {});
+                }}
+              >
+                <Ionicons name="play-back" size={18} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  seekBy(item.id, 10).catch(() => {});
+                }}
+              >
+                <Ionicons name="play-forward" size={18} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.8} onPress={() => openFullscreen(item.id)}>
+                <Ionicons name="expand-outline" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          <Reanimated.View pointerEvents="none" style={[styles.doubleTapHeartOverlay, heartStyle]}>
+            <Ionicons name="heart" size={90} color="#fff" />
+          </Reanimated.View>
+          </View>
+        </TouchableWithoutFeedback>
       </TouchableOpacity>
     );
   }
@@ -486,43 +508,23 @@ function SocialPostCard({
           </View>
         ) : null}
 
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.bigHeartOverlay,
-            {
-              opacity: heartAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [1, 0],
-              }),
-              transform: [
-                {
-                  scale: heartAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.5, 1.5],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <Ionicons name="heart" size={80} color="#fff" />
-        </Animated.View>
       </View>
 
       <View style={styles.actionsRow}>
-        <Animated.View style={[styles.actionBtn, { transform: [{ scale: scaleAnim }] }]}>
+        <View style={styles.actionBtn}>
           <TouchableOpacity activeOpacity={0.8} onPress={onLikePress}>
-            <Ionicons
-              name={liked ? "heart" : "heart-outline"}
-              size={24}
-              color={liked ? likeColor : T.textColor}
-            />
+            <Reanimated.View style={likeIconStyle}>
+              <Ionicons
+                name={liked ? "heart" : "heart-outline"}
+                size={24}
+                color={liked ? likeColor : T.textColor}
+              />
+            </Reanimated.View>
           </TouchableOpacity>
-          <Text style={[styles.actionCount, { color: liked ? likeColor : T.textColor }]}>
+          <Reanimated.Text style={[styles.actionCount, { color: liked ? likeColor : T.textColor }, likeCountStyle]}>
             {likeCount}
-          </Text>
-        </Animated.View>
+          </Reanimated.Text>
+        </View>
 
         <View style={styles.actionBtn}>
           <TouchableOpacity activeOpacity={0.8} onPress={openComments}>
@@ -533,12 +535,12 @@ function SocialPostCard({
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={onPressShare}>
+        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={handleShare}>
           <Ionicons name="paper-plane-outline" size={22} color={T.textColor} />
           <Text style={[styles.actionCount, { color: T.textColor }]}>{shareCount}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={onSavePress}>
+        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={handleSave}>
           <Ionicons
             name={saved ? "bookmark" : "bookmark-outline"}
             size={22}
@@ -676,21 +678,27 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     paddingTop: 6,
   },
-  videoTouchWrap: {
-    width: "100%",
-  },
-  soundBadge: {
+  doubleTapHeartOverlay: {
     position: "absolute",
-    bottom: 10,
-    right: 10,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    padding: 6,
-    borderRadius: 20,
+    top: "40%",
+    left: "40%",
   },
   bufferIndicator: {
     position: "absolute",
     top: "45%",
     left: "45%",
+  },
+  videoControlsBar: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   divider: {
     height: 1,
