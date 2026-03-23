@@ -1,25 +1,26 @@
-// src/domains/social/components/SocialPostCard.tsx
-// 🔒 SOCIAL POST CARD — list mode + REELS fullscreen (flex, tek aktif video)
-
 import { Ionicons } from "@expo/vector-icons";
-import { Video, ResizeMode } from "expo-av";
+import { useNavigation } from "@react-navigation/native";
+import { ResizeMode, Video, type AVPlaybackStatus } from "expo-av";
 import React, { useEffect, useRef, useState } from "react";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Reanimated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import {
   Animated,
   FlatList,
   Image,
-  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 
-import { t } from "../../../shared/i18n/t";
 import { useAppTheme } from "../../../shared/theme/appTheme";
-import type { SocialMediaItem, SocialPost } from "../types/social.types";
-import SocialEventFeedCard from "./SocialEventFeedCard";
 import {
   getPostById,
   isPostSaved,
@@ -27,713 +28,417 @@ import {
   toggleLikePost,
   toggleSavePost,
 } from "../services/socialFeedStateService";
+import type { SocialMediaItem, SocialPost } from "../types/social.types";
+import SocialEventFeedCard from "./SocialEventFeedCard";
+
+const AnimatedImage = Reanimated.createAnimatedComponent(Image);
 
 type Props = {
   post: SocialPost;
-  /** Dikey tam ekran Reels düzeni */
   reels?: boolean;
-  /** Görünür reel satırı — yalnızca bu öğede video oynar */
   isActive?: boolean;
-  onPressPost: () => void;
-  onPressMedia: (initialIndex: number) => void;
+  onPressPost?: () => void;
+  onPressMedia?: (initialIndex: number) => void;
   onToggleLike?: () => void;
-  onPressComments: () => void;
-  onPressMenu: () => void;
+  onPressComments?: () => void;
+  onPressMenu?: () => void;
   onPressShare?: () => void;
   onToggleSave?: () => void;
   saved?: boolean;
 };
 
-const CARD_INNER_H_PAD = 14;
-const LIST_MEDIA_MIN_HEIGHT = 240;
-/** Reels: sol üst menü */
-const REELS_TOP_ALIGN = 12;
-/** Reels: sağ alt aksiyon sütunu (caption ~bottom 40 üstünde) */
-const REELS_ACTIONS_BOTTOM = 110;
+function formatPostTime(dateString?: string) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffMin < 1) return "Simdi";
+  if (diffMin < 60) return `${diffMin} dk once`;
+  if (diffHour < 24) return `${diffHour} sa once`;
+  if (diffDay === 1) return "Dun";
+  if (diffDay < 7) return `${diffDay} gun once`;
+
+  return (
+    date.toLocaleDateString("tr-TR", {
+      day: "numeric",
+      month: "short",
+    }) +
+    " " +
+    date.toLocaleTimeString("tr-TR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  );
+}
+
+function ZoomableImage({
+  uri,
+  ratio,
+  onLoad,
+}: {
+  uri: string;
+  ratio: number;
+  onLoad: (e: { nativeEvent: { source: { width: number; height: number } } }) => void;
+}) {
+  const scale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const baseScale = useSharedValue(1);
+
+  const pinch = Gesture.Pinch()
+    .onStart(() => {
+      baseScale.value = scale.value;
+    })
+    .onUpdate((e) => {
+      const next = baseScale.value * e.scale;
+      scale.value = Math.max(1, Math.min(next, 4));
+    })
+    .onEnd(() => {
+      if (scale.value < 1.01) {
+        scale.value = withTiming(1, { duration: 180 });
+        translateX.value = withTiming(0, { duration: 180 });
+        translateY.value = withTiming(0, { duration: 180 });
+      }
+    });
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      if (scale.value <= 1) return;
+      translateX.value = e.translationX;
+      translateY.value = e.translationY;
+    })
+    .onEnd(() => {
+      translateX.value = withTiming(0, { duration: 180 });
+      translateY.value = withTiming(0, { duration: 180 });
+    });
+
+  const composed = Gesture.Simultaneous(pinch, pan);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={composed}>
+      <AnimatedImage
+        source={{ uri }}
+        style={[styles.media, { aspectRatio: ratio }, animatedStyle]}
+        resizeMode="contain"
+        onLoad={onLoad}
+      />
+    </GestureDetector>
+  );
+}
 
 function SocialPostCard({
   post,
-  reels = false,
   isActive = false,
   onPressPost,
   onPressMedia,
+  onToggleLike,
   onPressComments,
   onPressMenu,
   onPressShare,
+  onToggleSave,
 }: Props) {
   const T = useAppTheme();
+  const navigation = useNavigation<any>();
   const likeColor = T.isDark ? "#1834ae" : "#00bfff";
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const heartAnim = useRef(new Animated.Value(0)).current;
 
-  const [, setFeedTick] = useState(0);
+  const [, setTick] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [carouselWidth, setCarouselWidth] = useState(0);
+  const [mediaRatios, setMediaRatios] = useState<Record<string, number>>({});
+
   useEffect(() => {
-    const unsub = subscribeFeed(() => setFeedTick((n) => n + 1));
+    const unsub = subscribeFeed(() => setTick((n) => n + 1));
     return unsub;
   }, []);
 
   const livePost = getPostById(post.id) ?? post;
-  const saved = isPostSaved(post.id);
-  const liked = !!livePost.likedByMe;
-  const likeCount = livePost.likeCount ?? 0;
-  const showLikeCount = livePost.settings?.likesVisible !== false;
-  const commentsOpen =
-    (livePost.settings?.commentsEnabled ?? livePost.settings?.comments) !==
-    false;
-
   const media = livePost.media ?? [];
-
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [muted, setMuted] = useState(true);
-  const [carouselBox, setCarouselBox] = useState({ w: 0, h: 0 });
+  const liked = !!livePost.likedByMe;
+  const saved = isPostSaved(livePost.id);
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [livePost.id, media.length]);
+  }, [livePost.id]);
 
-  const lastTap = useRef(0);
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressHandledRef = useRef(false);
-
-  useEffect(() => {
-    return () => {
-      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
-    };
-  }, []);
-
-  function handleListMediaTap() {
-    const now = Date.now();
-    if (lastTap.current > 0 && now - lastTap.current < 300) {
-      if (singleTapTimerRef.current) {
-        clearTimeout(singleTapTimerRef.current);
-        singleTapTimerRef.current = null;
-      }
-      lastTap.current = 0;
-      toggleLikePost(livePost.id);
-      scaleAnim.stopAnimation();
-      scaleAnim.setValue(0);
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 0,
-          duration: 200,
-          delay: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      return;
-    }
-    lastTap.current = now;
-    if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
-    singleTapTimerRef.current = setTimeout(() => {
-      singleTapTimerRef.current = null;
-      setMuted((prev) => !prev);
-      lastTap.current = 0;
-    }, 280);
+  if (livePost.event) {
+    return <SocialEventFeedCard event={livePost.event} />;
   }
 
-  function handleListMediaLongPress(index: number) {
-    if (singleTapTimerRef.current) {
-      clearTimeout(singleTapTimerRef.current);
-      singleTapTimerRef.current = null;
-    }
-    lastTap.current = 0;
-    longPressHandledRef.current = true;
-    onPressMedia(index);
-  }
+  const likeCount = livePost.likeCount ?? 0;
+  const commentCount = livePost.commentCount ?? 0;
+  const saveCount = (livePost as SocialPost & { saveCount?: number }).saveCount ?? 0;
+  const shareCount = (livePost as SocialPost & { shareCount?: number }).shareCount ?? 0;
+  const activeMedia = media[activeIndex];
+  const activeRatio = activeMedia ? (mediaRatios[activeMedia.id] ?? 1) : 1;
 
-  function handleListMediaPress(index: number) {
-    if (longPressHandledRef.current) {
-      longPressHandledRef.current = false;
-      return;
-    }
-    handleListMediaTap();
-  }
-
-  function getTimeAgo(date: string) {
-    const now = new Date();
-    const created = new Date(date);
-    const diff = Math.floor((now.getTime() - created.getTime()) / 1000);
-    if (diff < 60) return t("social.time.now");
-    const min = Math.floor(diff / 60);
-    if (min < 60) return t("social.time.minAgo").replace("{{m}}", String(min));
-    const hour = Math.floor(min / 60);
-    if (hour < 24) return t("social.time.hourAgo").replace("{{h}}", String(hour));
-    const day = Math.floor(hour / 24);
-    return t("social.time.dayAgo").replace("{{d}}", String(day));
-  }
-
-  function onCarouselScrollEnd(e: {
-    nativeEvent: { contentOffset: { x: number } };
-  }) {
-    const slideW = carouselBox.w;
-    if (slideW <= 0) return;
-    const i = Math.round(e.nativeEvent.contentOffset.x / slideW);
-    const clamped = Math.min(Math.max(0, i), Math.max(0, media.length - 1));
+  function handleMomentumEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (!carouselWidth) return;
+    const next = Math.round(e.nativeEvent.contentOffset.x / carouselWidth);
+    const clamped = Math.max(0, Math.min(next, media.length - 1));
     setActiveIndex(clamped);
   }
 
-  function onCarouselLayout(e: {
-    nativeEvent: { layout: { width: number; height: number } };
-  }) {
-    const { width: w, height: h } = e.nativeEvent.layout;
-    setCarouselBox((prev) =>
-      prev.w !== w || prev.h !== h ? { w, h } : prev
-    );
+  function onLikePress() {
+    if (onToggleLike) {
+      onToggleLike();
+    } else {
+      toggleLikePost(livePost.id);
+    }
+
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 1.3,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    heartAnim.setValue(0);
+    Animated.timing(heartAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
   }
 
-  function renderListCarouselItem({
-    item,
-    index,
-  }: {
-    item: SocialMediaItem;
-    index: number;
-  }) {
-    const isSlideActive = index === activeIndex;
-    const isVideo = item.type === "video";
-    const shouldPlayVideo = isActive && isSlideActive && isVideo;
-    const pageW = carouselBox.w;
-    const pageH = carouselBox.h;
+  function onSavePress() {
+    if (onToggleSave) {
+      onToggleSave();
+      return;
+    }
+    toggleSavePost(livePost.id);
+  }
 
+  function openComments() {
+    if (onPressComments) {
+      onPressComments();
+      return;
+    }
+    navigation.navigate("SocialPostDetail", {
+      postId: livePost.id,
+    });
+  }
+
+  function setMediaRatio(id: string, ratio: number) {
+    if (!Number.isFinite(ratio) || ratio <= 0) return;
+    setMediaRatios((prev) => (prev[id] === ratio ? prev : { ...prev, [id]: ratio }));
+  }
+
+  function renderMedia({ item, index }: { item: SocialMediaItem; index: number }) {
+    const pageWidth = carouselWidth || 1;
+    const shouldPlay = item.type === "video" && isActive && index === activeIndex;
+    const itemRatio = mediaRatios[item.id] ?? 1;
     return (
-      <Pressable
-        delayLongPress={380}
-        onLongPress={() => handleListMediaLongPress(index)}
-        onPress={() => handleListMediaPress(index)}
+      <TouchableOpacity
+        activeOpacity={0.95}
+        style={[styles.mediaPage, { width: pageWidth }]}
+        onPress={() => onPressMedia?.(index)}
       >
-        <View style={[styles.carouselPage, { width: pageW, height: pageH }]}>
-          {isVideo ? (
+        <View style={[styles.mediaWrapper, { aspectRatio: itemRatio }]}>
+          {item.type === "video" ? (
             <Video
               source={{ uri: item.uri }}
-              style={styles.mediaFill}
-              resizeMode={ResizeMode.COVER}
-              shouldPlay={shouldPlayVideo}
+              style={[styles.media, { aspectRatio: itemRatio }]}
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay={shouldPlay}
               isLooping
-              isMuted={muted}
-              useNativeControls={false}
+              isMuted
+              onLoad={(status: AVPlaybackStatus) => {
+                if (!status.isLoaded) return;
+                const width = status.naturalSize?.width;
+                const height = status.naturalSize?.height;
+                if (width && height) {
+                  setMediaRatio(item.id, width / height);
+                }
+              }}
             />
           ) : (
-            <Image
-              source={{ uri: item.uri }}
-              style={styles.mediaFill}
-              resizeMode="cover"
-            />
-          )}
-          {isVideo && item.durationSec != null ? (
-            <View
-              style={[
-                styles.videoDurationBadge,
-                { backgroundColor: T.textColor + "dd" },
-              ]}
-            >
-              <Text style={[styles.videoDurationText, { color: T.cardBg }]}>
-                {Math.floor(item.durationSec / 60)}:
-                {String(item.durationSec % 60).padStart(2, "0")}
-              </Text>
-            </View>
-          ) : null}
-          {isVideo ? (
-            <View style={styles.soundIconWrap} pointerEvents="none">
-              <Ionicons
-                name={muted ? "volume-mute" : "volume-high"}
-                size={20}
-                color="#fff"
-              />
-            </View>
-          ) : null}
-        </View>
-      </Pressable>
-    );
-  }
-
-  function renderReelsCarouselItem({
-    item,
-    index,
-  }: {
-    item: SocialMediaItem;
-    index: number;
-  }) {
-    const isSlideActive = index === activeIndex;
-    const isVideo = item.type === "video";
-    const shouldPlayVideo = isActive && isSlideActive && isVideo;
-    const pageW = carouselBox.w;
-    const pageH = carouselBox.h;
-
-    return (
-      <View style={[styles.reelsPage, { width: pageW, height: pageH }]}>
-        <TouchableWithoutFeedback
-          onPress={() => setMuted((prev) => !prev)}
-        >
-          <View style={styles.reelsMediaTouch}>
-            {isVideo ? (
-              <Video
-                source={{ uri: item.uri }}
-                style={styles.reelsMedia}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={shouldPlayVideo}
-                isLooping
-                isMuted={muted}
-                useNativeControls={false}
-              />
-            ) : (
+            <>
               <Image
                 source={{ uri: item.uri }}
-                style={styles.reelsMedia}
+                style={styles.blurBackground}
+                blurRadius={20}
                 resizeMode="cover"
               />
-            )}
-            {isVideo ? (
-              <View style={styles.soundIconWrap} pointerEvents="none">
-                <Ionicons
-                  name={muted ? "volume-mute" : "volume-high"}
-                  size={20}
-                  color="#fff"
-                />
-              </View>
-            ) : null}
-          </View>
-        </TouchableWithoutFeedback>
-      </View>
-    );
-  }
-
-  function renderListMedia() {
-    if (!media.length) {
-      return (
-        <View
-          style={[
-            styles.emptyMedia,
-            styles.emptyMediaList,
-            { backgroundColor: T.backgroundColor },
-          ]}
-        />
-      );
-    }
-
-    const carouselRootStyle = [
-      styles.carouselRoot,
-      { backgroundColor: "#000000" },
-      styles.carouselRootList,
-    ];
-
-    return (
-      <View style={[styles.carouselBleed, { marginHorizontal: -CARD_INNER_H_PAD }]}>
-        <View style={carouselRootStyle} onLayout={onCarouselLayout}>
-          {carouselBox.w > 0 ? (
-            <FlatList
-              data={media}
-              horizontal
-              pagingEnabled
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(m) => m.id}
-              renderItem={renderListCarouselItem}
-              onMomentumScrollEnd={onCarouselScrollEnd}
-              getItemLayout={(_: unknown, idx: number) => ({
-                length: carouselBox.w,
-                offset: carouselBox.w * idx,
-                index: idx,
-              })}
-              style={styles.carouselList}
-              contentContainerStyle={styles.carouselListContent}
-              extraData={`${carouselBox.w}x${carouselBox.h}`}
-              initialNumToRender={1}
-              maxToRenderPerBatch={2}
-              windowSize={3}
-              removeClippedSubviews
-            />
-          ) : (
-            <View style={styles.carouselListPlaceholder} />
+              <ZoomableImage
+                uri={item.uri}
+                ratio={itemRatio}
+                onLoad={(e) => {
+                  const { width, height } = e.nativeEvent.source;
+                  if (width && height) {
+                    setMediaRatio(item.id, width / height);
+                  }
+                }}
+              />
+            </>
           )}
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.heartBurst,
-              {
-                opacity: scaleAnim,
-                transform: [{ scale: scaleAnim }],
-              },
-            ]}
-          >
-            <Ionicons name="heart" size={80} color="#ffffff" />
-          </Animated.View>
-          {media.length > 1 ? (
-            <View style={styles.dotsRow} pointerEvents="none">
-              {media.map((m, i) => (
-                <View
-                  key={m.id}
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor:
-                        i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)",
-                    },
-                  ]}
-                />
-              ))}
-            </View>
-          ) : null}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 
-  function renderReelsMedia() {
-    if (!media.length) {
-      return <View style={[styles.reelsMediaShell, styles.reelsEmpty]} />;
-    }
+  return (
+    <View style={[styles.card, { backgroundColor: T.cardBg }]}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.headerLeft}
+          activeOpacity={0.85}
+          onPress={onPressPost}
+        >
+          <View style={styles.avatarWrap}>
+            {livePost.userAvatarUri ? (
+              <Image source={{ uri: livePost.userAvatarUri }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Ionicons name="person" size={18} color="#666" />
+              </View>
+            )}
+          </View>
+          <View style={styles.userMeta}>
+            <Text style={[styles.username, { color: T.textColor }]} numberOfLines={1}>
+              {livePost.username}
+            </Text>
+            <Text style={[styles.postTime, { color: T.mutedText ?? T.textColor }]} numberOfLines={1}>
+              {formatPostTime(livePost.createdAt)}
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-    return (
-      <View style={styles.reelsMediaShell} onLayout={onCarouselLayout}>
-        {carouselBox.w > 0 ? (
+        <TouchableOpacity activeOpacity={0.8} onPress={onPressMenu}>
+          <Ionicons name="ellipsis-horizontal" size={20} color={T.textColor} />
+        </TouchableOpacity>
+      </View>
+
+      <View
+        style={[styles.carouselWrap, { aspectRatio: activeRatio }]}
+        onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}
+      >
+        {media.length > 0 ? (
           <FlatList
             data={media}
             horizontal
             pagingEnabled
-            nestedScrollEnabled
             showsHorizontalScrollIndicator={false}
-            keyExtractor={(m) => m.id}
-            renderItem={renderReelsCarouselItem}
-            onMomentumScrollEnd={onCarouselScrollEnd}
-            getItemLayout={(_: unknown, idx: number) => ({
-              length: carouselBox.w,
-              offset: carouselBox.w * idx,
-              index: idx,
+            keyExtractor={(item) => item.id}
+            renderItem={renderMedia}
+            onMomentumScrollEnd={handleMomentumEnd}
+            getItemLayout={(_, index) => ({
+              length: carouselWidth || 1,
+              offset: (carouselWidth || 1) * index,
+              index,
             })}
-            style={styles.carouselList}
-            contentContainerStyle={styles.carouselListContent}
-            extraData={`${carouselBox.w}x${carouselBox.h}`}
-            initialNumToRender={1}
-            maxToRenderPerBatch={2}
-            windowSize={3}
-            removeClippedSubviews
           />
         ) : (
-          <View style={styles.carouselListPlaceholder} />
+          <View style={[styles.media, styles.emptyMedia, { aspectRatio: 1 }]} />
         )}
+
         {media.length > 1 ? (
-          <View style={styles.reelsDots} pointerEvents="none">
-            {media.map((m, i) => (
+          <View style={styles.dotsRow} pointerEvents="none">
+            {media.map((m, idx) => (
               <View
                 key={m.id}
                 style={[
                   styles.dot,
                   {
                     backgroundColor:
-                      i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)",
+                      idx === activeIndex ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.45)",
                   },
                 ]}
               />
             ))}
           </View>
         ) : null}
+
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.bigHeartOverlay,
+            {
+              opacity: heartAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1, 0],
+              }),
+              transform: [
+                {
+                  scale: heartAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.5, 1.5],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Ionicons name="heart" size={80} color="#fff" />
+        </Animated.View>
       </View>
-    );
-  }
-
-  if (livePost.event && !reels) {
-    return <SocialEventFeedCard event={livePost.event} />;
-  }
-
-  if (livePost.event && reels) {
-    return (
-      <View style={styles.reelsRoot}>
-        <View style={styles.reelsMediaShell}>
-          <SocialEventFeedCard event={livePost.event} />
-        </View>
-        <TouchableOpacity
-          style={styles.reelsMenuBtn}
-          onPress={onPressMenu}
-          hitSlop={12}
-        >
-          <Ionicons name="ellipsis-horizontal" size={22} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.reelsUserRow}
-          onPress={onPressPost}
-          activeOpacity={0.85}
-        >
-          <View style={styles.reelsAvatarWrap}>
-            {livePost.userAvatarUri ? (
-              <Image
-                source={{ uri: livePost.userAvatarUri }}
-                style={styles.reelsAvatarImg}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.reelsAvatarPlaceholder}>
-                <Ionicons name="person" size={18} color="#666" />
-              </View>
-            )}
-          </View>
-          <View style={styles.reelsUserNameRow}>
-            <Text style={styles.reelsUserNameText} numberOfLines={1}>
-              {livePost.username}
-            </Text>
-            {livePost.verified ? (
-              <Ionicons
-                name="checkmark-circle"
-                size={14}
-                color="#00bfff"
-                style={styles.reelsVerifiedIcon}
-              />
-            ) : null}
-          </View>
-        </TouchableOpacity>
-        {!!livePost.caption && (
-          <View style={styles.reelsCaptionWrap} pointerEvents="box-none">
-            <Text style={styles.reelsCaption} numberOfLines={4}>
-              {livePost.caption}
-            </Text>
-          </View>
-        )}
-      </View>
-    );
-  }
-
-  if (reels) {
-    return (
-      <View style={styles.reelsRoot}>
-        <View style={styles.reelsMediaOuter}>{renderReelsMedia()}</View>
-
-        <TouchableOpacity
-          style={styles.reelsMenuBtn}
-          onPress={onPressMenu}
-          hitSlop={12}
-        >
-          <Ionicons name="ellipsis-horizontal" size={22} color="#fff" />
-        </TouchableOpacity>
-
-        <View style={styles.reelsRight}>
-          <TouchableOpacity
-            onPress={() => toggleLikePost(livePost.id)}
-            activeOpacity={0.85}
-            style={styles.reelsActionCol}
-          >
-            <Ionicons
-              name={liked ? "heart" : "heart-outline"}
-              size={28}
-              color={liked ? likeColor : "#fff"}
-            />
-            {showLikeCount && likeCount > 0 ? (
-              <Text
-                style={[
-                  styles.reelsActionCount,
-                  { color: liked ? likeColor : "#fff" },
-                ]}
-              >
-                {likeCount}
-              </Text>
-            ) : null}
-          </TouchableOpacity>
-          {commentsOpen ? (
-            <TouchableOpacity
-              onPress={onPressComments}
-              activeOpacity={0.85}
-              style={styles.reelsActionCol}
-            >
-              <Ionicons name="chatbubble-outline" size={26} color="#fff" />
-              {(livePost.commentCount ?? 0) > 0 ? (
-                <Text style={styles.reelsActionCount}>
-                  {livePost.commentCount}
-                </Text>
-              ) : null}
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity
-            onPress={() => toggleSavePost(livePost.id)}
-            activeOpacity={0.85}
-            style={styles.reelsActionCol}
-          >
-            <Ionicons
-              name={saved ? "bookmark" : "bookmark-outline"}
-              size={26}
-              color={saved ? likeColor : "#fff"}
-            />
-          </TouchableOpacity>
-          {onPressShare ? (
-            <TouchableOpacity
-              onPress={onPressShare}
-              activeOpacity={0.85}
-              style={styles.reelsActionCol}
-            >
-              <Ionicons
-                name="paper-plane-outline"
-                size={26}
-                color="#fff"
-              />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        <TouchableOpacity
-          style={styles.reelsUserRow}
-          onPress={onPressPost}
-          activeOpacity={0.85}
-        >
-          <View style={styles.reelsAvatarWrap}>
-            {livePost.userAvatarUri ? (
-              <Image
-                source={{ uri: livePost.userAvatarUri }}
-                style={styles.reelsAvatarImg}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.reelsAvatarPlaceholder}>
-                <Ionicons name="person" size={18} color="#666" />
-              </View>
-            )}
-          </View>
-          <View style={styles.reelsUserNameRow}>
-            <Text style={styles.reelsUserNameText} numberOfLines={1}>
-              {livePost.username}
-            </Text>
-            {livePost.verified ? (
-              <Ionicons
-                name="checkmark-circle"
-                size={14}
-                color="#00bfff"
-                style={styles.reelsVerifiedIcon}
-              />
-            ) : null}
-          </View>
-        </TouchableOpacity>
-        {!!livePost.caption && (
-          <View style={styles.reelsCaptionWrap} pointerEvents="box-none">
-            <Text style={styles.reelsCaption} numberOfLines={4}>
-              {livePost.caption}
-            </Text>
-          </View>
-        )}
-      </View>
-    );
-  }
-
-  return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: T.cardBg, borderColor: T.border },
-      ]}
-    >
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={onPressPost}
-          style={styles.headerLeft}
-          activeOpacity={0.9}
-        >
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: T.backgroundColor, borderColor: T.border },
-            ]}
-          >
-            <Ionicons name="person" size={16} color={T.mutedText} />
-          </View>
-          <View>
-            <Text style={{ color: T.textColor, fontWeight: "900" }}>
-              {livePost.username}
-            </Text>
-            <Text style={{ color: T.mutedText, fontSize: 12 }}>
-              {getTimeAgo(livePost.createdAt)}
-            </Text>
-          </View>
-        </TouchableOpacity>
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity onPress={onPressMenu}>
-          <Ionicons name="ellipsis-horizontal" size={20} color={T.mutedText} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.mediaWrap}>{renderListMedia()}</View>
-
-      {!!livePost.music?.title && (
-        <Text style={[styles.musicText, { color: T.mutedText }]}>
-          🎵 {livePost.music.title}
-          {livePost.music.artist ? ` • ${livePost.music.artist}` : ""}
-        </Text>
-      )}
-
-      {!!livePost.caption && (
-        <Text
-          style={[styles.caption, { color: T.textColor }]}
-          numberOfLines={3}
-        >
-          {livePost.caption}
-        </Text>
-      )}
 
       <View style={styles.actionsRow}>
-        <TouchableOpacity
-          onPress={() => toggleLikePost(livePost.id)}
-          activeOpacity={0.7}
-          style={styles.actionBtn}
-        >
-          <Ionicons
-            name={liked ? "heart" : "heart-outline"}
-            size={22}
-            color={liked ? likeColor : T.textColor}
-          />
-        </TouchableOpacity>
-        {showLikeCount ? (
-          <Text
-            style={{
-              color: liked ? likeColor : T.textColor,
-              fontSize: 12,
-              fontWeight: "800",
-            }}
-          >
+        <Animated.View style={[styles.actionBtn, { transform: [{ scale: scaleAnim }] }]}>
+          <TouchableOpacity activeOpacity={0.8} onPress={onLikePress}>
+            <Ionicons
+              name={liked ? "heart" : "heart-outline"}
+              size={24}
+              color={liked ? likeColor : T.textColor}
+            />
+          </TouchableOpacity>
+          <Text style={[styles.actionCount, { color: liked ? likeColor : T.textColor }]}>
             {likeCount}
           </Text>
-        ) : null}
+        </Animated.View>
 
-        {commentsOpen ? (
-          <TouchableOpacity
-            onPress={onPressComments}
-            activeOpacity={0.7}
-            style={styles.actionBtn}
-          >
-            <Ionicons
-              name="chatbubble-outline"
-              size={19}
-              color={T.textColor}
-            />
-            <Text style={{ color: T.textColor, fontSize: 12, fontWeight: "800" }}>
-              {livePost.commentCount ?? 0}
-            </Text>
+        <View style={styles.actionBtn}>
+          <TouchableOpacity activeOpacity={0.8} onPress={openComments}>
+            <Ionicons name="chatbubble-outline" size={22} color={T.textColor} />
           </TouchableOpacity>
-        ) : null}
-
-        {onPressShare ? (
-          <TouchableOpacity
-            onPress={onPressShare}
-            activeOpacity={0.7}
-            style={styles.actionBtn}
-          >
-            <Ionicons
-              name="share-social-outline"
-              size={20}
-              color={T.textColor}
-            />
+          <TouchableOpacity activeOpacity={0.8} onPress={openComments}>
+            <Text style={[styles.actionCount, { color: T.textColor }]}>{commentCount}</Text>
           </TouchableOpacity>
-        ) : null}
+        </View>
 
-        <View style={{ flex: 1 }} />
+        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={onPressShare}>
+          <Ionicons name="paper-plane-outline" size={22} color={T.textColor} />
+          <Text style={[styles.actionCount, { color: T.textColor }]}>{shareCount}</Text>
+        </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => toggleSavePost(livePost.id)}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8} onPress={onSavePress}>
           <Ionicons
             name={saved ? "bookmark" : "bookmark-outline"}
-            size={20}
+            size={22}
             color={saved ? likeColor : T.textColor}
           />
+          <Text style={[styles.actionCount, { color: T.textColor }]}>{saveCount}</Text>
         </TouchableOpacity>
       </View>
+
+      <View style={[styles.divider, { backgroundColor: T.border ?? T.textColor }]} />
+
+      {!!livePost.caption && (
+        <View style={styles.captionWrap}>
+          <Text style={[styles.caption, { color: T.textColor }]}>{livePost.caption}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -741,55 +446,25 @@ function SocialPostCard({
 export default React.memo(SocialPostCard);
 
 const styles = StyleSheet.create({
-  reelsRoot: {
-    flex: 1,
-    backgroundColor: "#000000",
-    minHeight: 0,
-  },
-  reelsMediaOuter: {
-    flex: 1,
-    minHeight: 0,
-  },
-  reelsMediaShell: {
-    flex: 1,
-    minHeight: 0,
-    backgroundColor: "#000000",
+  card: {
+    marginBottom: 16,
+    borderRadius: 12,
     overflow: "hidden",
   },
-  reelsEmpty: {
-    backgroundColor: "#111",
-  },
-  reelsPage: {
-    overflow: "hidden",
-    backgroundColor: "#000",
-  },
-  reelsMediaTouch: {
-    flex: 1,
-    width: "100%",
-    height: "100%",
-  },
-  reelsMedia: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#000",
-  },
-  reelsMenuBtn: {
-    position: "absolute",
-    top: REELS_TOP_ALIGN,
-    left: 12,
-    zIndex: 20,
-    padding: 6,
-  },
-  reelsUserRow: {
-    position: "absolute",
-    bottom: 70,
-    left: 12,
-    right: 72,
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    zIndex: 10,
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  reelsAvatarWrap: {
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    minWidth: 0,
+  },
+  avatarWrap: {
     width: 36,
     height: 36,
     borderRadius: 10,
@@ -797,148 +472,66 @@ const styles = StyleSheet.create({
     marginRight: 10,
     backgroundColor: "#ccc",
   },
-  reelsAvatarImg: {
+  avatar: {
     width: "100%",
     height: "100%",
   },
-  reelsAvatarPlaceholder: {
+  avatarFallback: {
     flex: 1,
-    width: "100%",
-    height: "100%",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#ccc",
   },
-  reelsUserNameRow: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    minWidth: 0,
-  },
-  reelsUserNameText: {
-    flexShrink: 1,
-    color: "#fff",
+  username: {
     fontWeight: "600",
     fontSize: 14,
   },
-  reelsVerifiedIcon: {
-    marginLeft: 4,
+  userMeta: {
+    flex: 1,
+    minWidth: 0,
   },
-  reelsCaptionWrap: {
-    position: "absolute",
-    bottom: 40,
-    left: 12,
-    right: 12,
-    zIndex: 10,
+  postTime: {
+    fontSize: 12,
+    marginTop: 2,
   },
-  reelsCaption: {
-    color: "#fff",
-    fontSize: 14,
-    lineHeight: 20,
+  carouselWrap: {
+    width: "100%",
+    maxHeight: 500,
+    backgroundColor: "#000",
   },
-  reelsRight: {
-    position: "absolute",
-    right: 12,
-    bottom: REELS_ACTIONS_BOTTOM,
-    alignItems: "center",
-    zIndex: 10,
-    gap: 18,
+  mediaPage: {
+    width: "100%",
   },
-  reelsActionCol: {
-    alignItems: "center",
-  },
-  reelsActionCount: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  reelsDots: {
-    flexDirection: "row",
-    position: "absolute",
-    bottom: 120,
-    alignSelf: "center",
-    left: 0,
-    right: 0,
-    justifyContent: "center",
-  },
-  card: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 28 * 0.25,
-    borderWidth: 1,
+  mediaWrapper: {
+    width: "100%",
+    maxHeight: 500,
+    overflow: "hidden",
+    backgroundColor: "#000",
     alignItems: "center",
     justifyContent: "center",
   },
-  mediaWrap: {
+  blurBackground: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.25,
+  },
+  media: {
     width: "100%",
-    position: "relative",
-  },
-  carouselBleed: {
-    alignSelf: "stretch",
-    width: "100%",
-  },
-  carouselRoot: {
-    position: "relative",
-    overflow: "hidden",
-  },
-  carouselRootList: {
-    minHeight: LIST_MEDIA_MIN_HEIGHT,
-  },
-  carouselList: {
-    flex: 1,
-  },
-  carouselListPlaceholder: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  carouselListContent: {
-    flexGrow: 1,
-  },
-  carouselPage: {
-    overflow: "hidden",
-    backgroundColor: "#000",
-  },
-  mediaFill: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#000",
   },
   emptyMedia: {
-    width: "100%",
+    backgroundColor: "#111",
   },
-  emptyMediaList: {
-    minHeight: LIST_MEDIA_MIN_HEIGHT,
+  dotsRow: {
+    position: "absolute",
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
   },
-  heartBurst: {
+  bigHeartOverlay: {
     position: "absolute",
     top: "40%",
     left: "40%",
-  },
-  dotsRow: {
-    flexDirection: "row",
-    position: "absolute",
-    bottom: 10,
-    alignSelf: "center",
-    left: 0,
-    right: 0,
-    justifyContent: "center",
   },
   dot: {
     width: 6,
@@ -946,44 +539,33 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginHorizontal: 3,
   },
-  videoDurationBadge: {
-    position: "absolute",
-    right: 10,
-    top: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  soundIconWrap: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    padding: 8,
-    borderRadius: 20,
-  },
-  videoDurationText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  caption: {
-    marginTop: 10,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  musicText: {
-    marginTop: 10,
-    fontWeight: "800",
-  },
   actionsRow: {
     flexDirection: "row",
+    justifyContent: "space-around",
     alignItems: "center",
-    gap: 12,
-    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   actionBtn: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "center",
+  },
+  actionCount: {
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: "600",
+  },
+  captionWrap: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 6,
+  },
+  divider: {
+    height: 1,
+    opacity: 0.3,
+  },
+  caption: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

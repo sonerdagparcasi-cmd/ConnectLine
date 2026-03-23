@@ -109,7 +109,7 @@ export default function SocialExploreScreen() {
   );
 
   const openVideoFeed = useCallback(() => {
-    navigation.navigate("SocialVideoFeed");
+    navigation.navigate("SocialReels");
   }, [navigation]);
 
   const openEvent = useCallback(

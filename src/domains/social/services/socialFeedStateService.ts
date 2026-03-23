@@ -183,6 +183,20 @@ export function getFeedPosts(): SocialPost[] {
   );
 }
 
+export function getReelsPosts(): SocialPost[] {
+  const posts = filterBlockedAndMutedAuthors(filterPublished(getAllPosts()));
+  return posts
+    .filter((p) => {
+      const isPublic = p.visibility === "public";
+      const hasVideo = p.media?.some((m) => m.type === "video");
+      return isPublic && !!hasVideo && !p.archived;
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+}
+
 /* ------------------------------------------------------------------ */
 /* SPAM / RATE LIMIT (FAZ 5)                                          */
 /* ------------------------------------------------------------------ */

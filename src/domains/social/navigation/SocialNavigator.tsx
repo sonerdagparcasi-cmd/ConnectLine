@@ -36,6 +36,7 @@ import SocialStoryInsightsScreen from "../screens/SocialStoryInsightsScreen";
 
 /* EXPLORE */
 import SocialExploreScreen from "../screens/SocialExploreScreen";
+import SocialReelsScreen from "../screens/SocialReelsScreen";
 import SocialVideoFeedScreen from "../screens/SocialVideoFeedScreen";
 
 /* 🆕 NOTIFICATIONS */
@@ -67,6 +68,7 @@ export type SocialStackParamList = {
   SocialFeed: undefined;
 
   SocialExplore: undefined;
+  SocialReels: undefined;
 
   SocialVideoFeed: undefined;
 
@@ -148,6 +150,7 @@ export default function SocialNavigator({ entry = "feed" }: Props) {
 
       {/* EXPLORE */}
       <Stack.Screen name="SocialExplore" component={SocialExploreScreen} />
+      <Stack.Screen name="SocialReels" component={SocialReelsScreen} />
       <Stack.Screen name="SocialVideoFeed" component={SocialVideoFeedScreen} />
 
       {/* 🆕 NOTIFICATIONS */}
