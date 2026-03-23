@@ -12,8 +12,10 @@ import Reanimated, {
 } from "react-native-reanimated";
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Image,
+  PanResponder,
   Share,
   StyleSheet,
   Text,
@@ -162,7 +164,11 @@ function SocialPostCard({
   const heartScale = useSharedValue(0);
   const heartOpacity = useSharedValue(0);
   const likeScale = useSharedValue(1);
+  const seekAnim = useSharedValue(0);
   const videoRefs = useRef<Record<string, Video | null>>({});
+  const panRespondersRef = useRef<Record<string, ReturnType<typeof PanResponder.create>>>({});
+  const progressWidthsRef = useRef<Record<string, number>>({});
+  const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTap = useRef(0);
 
   const [, setTick] = useState(0);
@@ -171,6 +177,9 @@ function SocialPostCard({
   const [mediaRatios, setMediaRatios] = useState<Record<string, number>>({});
   const [bufferingById, setBufferingById] = useState<Record<string, boolean>>({});
   const [muted, setMuted] = useState(true);
+  const [showControls, setShowControls] = useState(true);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
 
   useEffect(() => {
     const unsub = subscribeFeed(() => setTick((n) => n + 1));
@@ -185,6 +194,14 @@ function SocialPostCard({
   useEffect(() => {
     setActiveIndex(0);
   }, [livePost.id]);
+
+  useEffect(() => {
+    if (!showControls) return;
+    const t = setTimeout(() => {
+      setShowControls(false);
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [showControls]);
 
   useEffect(() => {
     const activeMedia = media[activeIndex];
@@ -273,8 +290,26 @@ function SocialPostCard({
     setMediaRatios((prev) => (prev[id] === ratio ? prev : { ...prev, [id]: ratio }));
   }
 
+  function toggleControls() {
+    setShowControls((p) => !p);
+  }
+
+  function formatTime(ms: number) {
+    if (!ms) return "0:00";
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec < 10 ? "0" : ""}${sec}`;
+  }
+
+  function triggerSeekFeedback() {
+    seekAnim.value = 1;
+    seekAnim.value = withTiming(0, { duration: 400 });
+  }
+
   function toggleSound() {
     setMuted((prev) => !prev);
+    setShowControls(true);
   }
 
   async function seekBy(mediaId: string, seconds: number) {
@@ -285,16 +320,55 @@ function SocialPostCard({
     let newPos = status.positionMillis + seconds * 1000;
     if (newPos < 0) newPos = 0;
     await ref.setPositionAsync(newPos);
+    triggerSeekFeedback();
+    setShowControls(true);
   }
 
   function openFullscreen(mediaId: string) {
     videoRefs.current[mediaId]?.presentFullscreenPlayer().catch(() => {});
+    setShowControls(true);
+  }
+
+  function getPanResponder(mediaId: string) {
+    if (!panRespondersRef.current[mediaId]) {
+      panRespondersRef.current[mediaId] = PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          const ref = videoRefs.current[mediaId];
+          ref?.pauseAsync().catch(() => {});
+        },
+        onPanResponderMove: (evt) => {
+          const barWidth = progressWidthsRef.current[mediaId] || 0;
+          if (!barWidth || !duration) return;
+          const locationX = evt.nativeEvent.locationX;
+          const clampedX = Math.max(0, Math.min(locationX, barWidth));
+          const ratio = clampedX / barWidth;
+          const newPos = ratio * duration;
+          const ref = videoRefs.current[mediaId];
+          if (!ref || !Number.isFinite(newPos)) return;
+          ref.setPositionAsync(newPos).catch(() => {});
+          setPosition(newPos);
+        },
+        onPanResponderRelease: () => {
+          const ref = videoRefs.current[mediaId];
+          if (isActive) {
+            ref?.playAsync().catch(() => {});
+          }
+        },
+      });
+    }
+    return panRespondersRef.current[mediaId];
   }
 
   function handleMediaTap() {
     const now = Date.now();
     const DOUBLE_PRESS_DELAY = 250;
     if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+        singleTapTimeoutRef.current = null;
+      }
       if (!liked) {
         if (onToggleLike) {
           onToggleLike();
@@ -315,6 +389,10 @@ function SocialPostCard({
           withTiming(1, { duration: 120 })
         );
       }
+    } else {
+      singleTapTimeoutRef.current = setTimeout(() => {
+        toggleControls();
+      }, DOUBLE_PRESS_DELAY);
     }
     lastTap.current = now;
   }
@@ -327,6 +405,10 @@ function SocialPostCard({
   }));
   const likeCountStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 + (likeScale.value - 1) * 0.5 }],
+  }));
+  const seekFeedbackStyle = useAnimatedStyle(() => ({
+    opacity: seekAnim.value,
+    transform: [{ scale: 0.9 + seekAnim.value * 0.4 }],
   }));
 
   function renderMedia({ item, index }: { item: SocialMediaItem; index: number }) {
@@ -366,6 +448,8 @@ function SocialPostCard({
               }}
               onPlaybackStatusUpdate={(status) => {
                 if (!status.isLoaded) return;
+                setDuration(status.durationMillis || 0);
+                setPosition(status.positionMillis || 0);
                 const next = !!status.isBuffering;
                 setBufferingById((prev) =>
                   prev[item.id] === next ? prev : { ...prev, [item.id]: next }
@@ -397,7 +481,7 @@ function SocialPostCard({
               <ActivityIndicator size="small" color="#fff" />
             </View>
           ) : null}
-          {item.type === "video" ? (
+          {item.type === "video" && showControls ? (
             <View style={styles.videoControlsBar}>
               <TouchableOpacity activeOpacity={0.8} onPress={toggleSound}>
                 <Ionicons
@@ -426,6 +510,41 @@ function SocialPostCard({
                 <Ionicons name="expand-outline" size={18} color="#fff" />
               </TouchableOpacity>
             </View>
+          ) : null}
+          {item.type === "video" ? (
+            <View
+              {...getPanResponder(item.id).panHandlers}
+              style={styles.progressWrap}
+              onLayout={(e) => {
+                progressWidthsRef.current[item.id] = e.nativeEvent.layout.width;
+              }}
+            >
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${Math.max(
+                        0,
+                        Math.min(100, (duration ? position / duration : 0) * 100)
+                      )}%`,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          ) : null}
+          {item.type === "video" && showControls ? (
+            <View style={styles.timeTopRight}>
+              <Text style={styles.timeTopRightText}>
+                {formatTime(position)} / {formatTime(duration)}
+              </Text>
+            </View>
+          ) : null}
+          {item.type === "video" ? (
+            <Reanimated.View pointerEvents="none" style={[styles.seekFeedback, seekFeedbackStyle]}>
+              <Ionicons name="play" size={24} color="#fff" />
+            </Reanimated.View>
           ) : null}
           <Reanimated.View pointerEvents="none" style={[styles.doubleTapHeartOverlay, heartStyle]}>
             <Ionicons name="heart" size={90} color="#fff" />
@@ -695,10 +814,48 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
+    zIndex: 10,
+    elevation: 10,
+  },
+  progressWrap: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingBottom: 0,
+  },
+  progressTrack: {
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.3)",
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: "#fff",
+  },
+  timeTopRight: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    zIndex: 10,
+    elevation: 10,
+  },
+  timeTopRightText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  seekFeedback: {
+    position: "absolute",
+    top: "45%",
+    left: "46%",
   },
   divider: {
     height: 1,
