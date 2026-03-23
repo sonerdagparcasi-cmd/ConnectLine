@@ -79,7 +79,10 @@ export type SocialStackParamList = {
   SocialChat: { userId: string };
 
   SocialCreatePost: { editingPostId?: string } | undefined;
-  SocialPostDetail: { postId: string };
+  SocialPostDetail: {
+    postId: string;
+    origin?: { x: number; y: number; width: number; height: number };
+  };
   SocialEditPost: { postId: string };
 
   SocialMediaPreview: {

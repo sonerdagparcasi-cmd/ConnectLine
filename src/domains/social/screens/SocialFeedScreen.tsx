@@ -31,6 +31,7 @@ export default function SocialFeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [visibleIndex, setVisibleIndex] = useState(0);
 
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,6 +81,17 @@ export default function SocialFeedScreen() {
     }, 1000);
   }, [loadingMore]);
 
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 70,
+  });
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+      if (viewableItems.length > 0) {
+        setVisibleIndex(viewableItems[0].index ?? 0);
+      }
+    }
+  );
+
   if (loading) {
     return (
       <View style={[styles.root, { backgroundColor: T.backgroundColor }]}>
@@ -105,7 +117,15 @@ export default function SocialFeedScreen() {
       <FlatList
         data={visiblePosts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <SocialPostCard post={item} />}
+        renderItem={({ item, index }) => (
+          <SocialPostCard
+            post={item}
+            isActive={index === visibleIndex}
+            shouldPreload={index === visibleIndex + 1}
+          />
+        )}
+        onViewableItemsChanged={onViewableItemsChanged.current}
+        viewabilityConfig={viewabilityConfig.current}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -122,9 +142,9 @@ export default function SocialFeedScreen() {
             </View>
           )
         }
-        initialNumToRender={5}
-        maxToRenderPerBatch={5}
-        windowSize={7}
+        initialNumToRender={3}
+        maxToRenderPerBatch={3}
+        windowSize={5}
         removeClippedSubviews
       />
 

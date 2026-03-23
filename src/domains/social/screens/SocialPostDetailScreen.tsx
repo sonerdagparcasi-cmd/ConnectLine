@@ -11,6 +11,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Dimensions,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -21,6 +22,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import type { RouteProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -75,6 +81,7 @@ export default function SocialPostDetailScreen() {
   const navigation = useNavigation<Nav>();
 
   const { postId } = route.params;
+  const origin = route.params.origin;
 
   const [post, setPost] = useState<SocialPost | undefined>(() =>
     getPostById(postId)
@@ -83,10 +90,17 @@ export default function SocialPostDetailScreen() {
     getComments(postId)
   );
   const [commentText, setCommentText] = useState("");
+  const [showOpenTransition, setShowOpenTransition] = useState(!!origin);
   const inputRef = useRef<TextInput>(null);
   const listRef = useRef<FlatList<SocialComment>>(null);
   /** Engelle / takip grafik güncellemelerinde yeniden çizim */
   const [, setGraphTick] = useState(0);
+  const screen = Dimensions.get("window");
+  const transitionScale = useSharedValue(origin ? 0.98 : 1);
+  const transitionX = useSharedValue(origin?.x ?? 0);
+  const transitionY = useSharedValue(origin?.y ?? 0);
+  const transitionWidth = useSharedValue(origin?.width ?? screen.width);
+  const transitionHeight = useSharedValue(origin?.height ?? screen.height);
 
   useEffect(() => {
     const syncPost = () => {
@@ -110,6 +124,17 @@ export default function SocialPostDetailScreen() {
     });
     return unsub;
   }, [postId]);
+
+  useEffect(() => {
+    if (!origin) return;
+    transitionScale.value = withTiming(1, { duration: 300 });
+    transitionX.value = withTiming(0, { duration: 300 });
+    transitionY.value = withTiming(0, { duration: 300 });
+    transitionWidth.value = withTiming(screen.width, { duration: 300 });
+    transitionHeight.value = withTiming(screen.height, { duration: 300 });
+    const timeout = setTimeout(() => setShowOpenTransition(false), 320);
+    return () => clearTimeout(timeout);
+  }, [origin, screen.height, screen.width, transitionHeight, transitionScale, transitionWidth, transitionX, transitionY]);
 
   const saved = post ? isPostSaved(post.id) : false;
   const liked = post?.likedByMe ?? false;
@@ -245,6 +270,14 @@ export default function SocialPostDetailScreen() {
 
   const listBottomPad =
     (commentsOpen ? COMMENT_INPUT_BAR_HEIGHT + 10 + insets.bottom : 0) + 100;
+  const transitionStyle = useAnimatedStyle(() => ({
+    position: "absolute",
+    top: transitionY.value,
+    left: transitionX.value,
+    width: transitionWidth.value,
+    height: transitionHeight.value,
+    transform: [{ scale: transitionScale.value }],
+  }));
 
   return (
     <SocialScreenLayout title={t("social.postDetail.title")} scroll={false}>
@@ -448,6 +481,16 @@ export default function SocialPostDetailScreen() {
           </View>
         </View>
       ) : null}
+
+      {showOpenTransition && origin && post.media?.[0]?.uri ? (
+        <Animated.View pointerEvents="none" style={[transitionStyle, { zIndex: 999 }]}>
+          <Image
+            source={{ uri: post.media[0].uri }}
+            style={styles.transitionImage}
+            resizeMode="cover"
+          />
+        </Animated.View>
+      ) : null}
         </View>
       </KeyboardAvoidingView>
     </SocialScreenLayout>
@@ -465,6 +508,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     position: "relative",
+  },
+  transitionImage: {
+    width: "100%",
+    height: "100%",
   },
   commentList: {
     flex: 1,

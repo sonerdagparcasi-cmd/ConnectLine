@@ -9,6 +9,7 @@ import Reanimated, {
   withTiming,
 } from "react-native-reanimated";
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   Image,
@@ -37,6 +38,7 @@ type Props = {
   post: SocialPost;
   reels?: boolean;
   isActive?: boolean;
+  shouldPreload?: boolean;
   onPressPost?: () => void;
   onPressMedia?: (initialIndex: number) => void;
   onToggleLike?: () => void;
@@ -143,6 +145,7 @@ function ZoomableImage({
 function SocialPostCard({
   post,
   isActive = false,
+  shouldPreload = false,
   onPressPost,
   onPressMedia,
   onToggleLike,
@@ -156,11 +159,13 @@ function SocialPostCard({
   const likeColor = T.isDark ? "#1834ae" : "#00bfff";
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartAnim = useRef(new Animated.Value(0)).current;
+  const videoRefs = useRef<Record<string, Video | null>>({});
 
   const [, setTick] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [carouselWidth, setCarouselWidth] = useState(0);
   const [mediaRatios, setMediaRatios] = useState<Record<string, number>>({});
+  const [bufferingById, setBufferingById] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const unsub = subscribeFeed(() => setTick((n) => n + 1));
@@ -175,6 +180,29 @@ function SocialPostCard({
   useEffect(() => {
     setActiveIndex(0);
   }, [livePost.id]);
+
+  useEffect(() => {
+    const activeMedia = media[activeIndex];
+    if (!activeMedia || activeMedia.type !== "video") return;
+    const activeVideoRef = videoRefs.current[activeMedia.id];
+    if (!activeVideoRef) return;
+    if (!isActive) {
+      activeVideoRef.pauseAsync().catch(() => {});
+    } else {
+      activeVideoRef.playAsync().catch(() => {});
+    }
+  }, [activeIndex, isActive, media]);
+
+  useEffect(() => {
+    if (!shouldPreload) return;
+    const nextVideo = media.find((m) => m.type === "video");
+    if (!nextVideo) return;
+    const nextVideoRef = videoRefs.current[nextVideo.id];
+    if (!nextVideoRef) return;
+    nextVideoRef
+      .loadAsync({ uri: nextVideo.uri }, {}, false)
+      .catch(() => {});
+  }, [media, shouldPreload]);
 
   if (livePost.event) {
     return <SocialEventFeedCard event={livePost.event} />;
@@ -249,6 +277,7 @@ function SocialPostCard({
     const pageWidth = carouselWidth || 1;
     const shouldPlay = item.type === "video" && isActive && index === activeIndex;
     const itemRatio = mediaRatios[item.id] ?? 1;
+    const isBuffering = bufferingById[item.id] ?? false;
     return (
       <TouchableOpacity
         activeOpacity={0.95}
@@ -258,12 +287,17 @@ function SocialPostCard({
         <View style={[styles.mediaWrapper, { aspectRatio: itemRatio }]}>
           {item.type === "video" ? (
             <Video
+              ref={(ref) => {
+                videoRefs.current[item.id] = ref;
+              }}
               source={{ uri: item.uri }}
-              style={[styles.media, { aspectRatio: itemRatio }]}
+              style={[styles.media, { aspectRatio: itemRatio, backgroundColor: "#000" }]}
               resizeMode={ResizeMode.CONTAIN}
               shouldPlay={shouldPlay}
               isLooping
               isMuted
+              posterSource={{ uri: item.uri }}
+              usePoster
               onLoad={(status: AVPlaybackStatus) => {
                 if (!status.isLoaded) return;
                 const width = status.naturalSize?.width;
@@ -271,6 +305,13 @@ function SocialPostCard({
                 if (width && height) {
                   setMediaRatio(item.id, width / height);
                 }
+              }}
+              onPlaybackStatusUpdate={(status) => {
+                if (!status.isLoaded) return;
+                const next = !!status.isBuffering;
+                setBufferingById((prev) =>
+                  prev[item.id] === next ? prev : { ...prev, [item.id]: next }
+                );
               }}
             />
           ) : (
@@ -293,6 +334,11 @@ function SocialPostCard({
               />
             </>
           )}
+          {item.type === "video" && isBuffering ? (
+            <View style={styles.bufferIndicator}>
+              <ActivityIndicator size="small" color="#fff" />
+            </View>
+          ) : null}
         </View>
       </TouchableOpacity>
     );
@@ -559,6 +605,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 12,
     paddingTop: 6,
+  },
+  bufferIndicator: {
+    position: "absolute",
+    top: "45%",
+    left: "45%",
   },
   divider: {
     height: 1,

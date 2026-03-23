@@ -6,7 +6,7 @@ import type { RouteProp } from "@react-navigation/native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -69,6 +69,7 @@ export default function SocialProfileContainerScreen() {
   );
   const [savedList, setSavedList] = useState<SocialPost[]>(() => getSavedPosts());
   const [userEvents, setUserEvents] = useState<SocialEvent[]>([]);
+  const itemRefs = useRef<Record<string, any>>({});
 
   useEffect(() => {
     const sync = () => {
@@ -360,14 +361,38 @@ export default function SocialProfileContainerScreen() {
   const renderPostItem = useCallback(
     ({ item }: { item: SocialPost }) => {
       const media = item.media?.[0];
+      const handleOpenPost = () => {
+        const ref = itemRefs.current[item.id];
+        if (!ref || typeof ref.measureInWindow !== "function") {
+          navigation.navigate("SocialPostDetail", { postId: item.id });
+          return;
+        }
+        ref.measureInWindow((x: number, y: number, width: number, height: number) => {
+          navigation.navigate("SocialPostDetail", {
+            postId: item.id,
+            origin: { x, y, width, height },
+          });
+        });
+      };
       return (
         <TouchableOpacity
+          ref={(ref) => {
+            if (ref) itemRefs.current[item.id] = ref;
+          }}
           style={[styles.gridItem, { backgroundColor: T.cardBg }]}
           activeOpacity={0.9}
-          onPress={() => navigation.navigate("SocialPostDetail", { postId: item.id })}
+          onPress={handleOpenPost}
+          onLongPress={() => Alert.alert("Post seçenekleri")}
         >
           {media?.uri ? (
-            <Image source={{ uri: media.uri }} style={styles.gridImg} />
+            <>
+              <Image source={{ uri: media.uri }} style={styles.gridImg} />
+              {media.type === "video" && (
+                <View style={styles.videoBadge}>
+                  <Ionicons name="videocam" size={12} color="#fff" />
+                </View>
+              )}
+            </>
           ) : (
             <View style={[styles.gridPlaceholder, { backgroundColor: T.backgroundColor }]}>
               <Ionicons name="image" size={24} color={T.mutedText} />
@@ -449,6 +474,16 @@ export default function SocialProfileContainerScreen() {
     [T, profileSuggested, navigation]
   );
 
+  const EmptyGrid = useCallback(
+    () => (
+      <View style={styles.emptyState}>
+        <Ionicons name="images-outline" size={40} color={T.mutedText} />
+        <Text style={[styles.emptyStateText, { color: T.mutedText }]}>Henüz paylaşım yok</Text>
+      </View>
+    ),
+    [T.mutedText]
+  );
+
   if (!isOwner && blocked) {
     return (
       <View style={[styles.root, { backgroundColor: T.backgroundColor }]}>
@@ -496,8 +531,13 @@ export default function SocialProfileContainerScreen() {
           numColumns={3}
           ListHeaderComponent={Header}
           ListFooterComponent={SuggestedFooter}
+          ListEmptyComponent={EmptyGrid}
           renderItem={renderEventItem}
           contentContainerStyle={styles.listContent}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
+          removeClippedSubviews
         />
       ) : (
         <FlatList
@@ -506,8 +546,13 @@ export default function SocialProfileContainerScreen() {
           numColumns={3}
           ListHeaderComponent={Header}
           ListFooterComponent={SuggestedFooter}
+          ListEmptyComponent={EmptyGrid}
           renderItem={renderPostItem}
           contentContainerStyle={styles.listContent}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
+          removeClippedSubviews
         />
       )}
     </View>
@@ -691,18 +736,35 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     letterSpacing: 0.22,
   },
-  listContent: { paddingBottom: 40, flexGrow: 1 },
+  listContent: { paddingBottom: 60, flexGrow: 1 },
   gridItem: {
-    width: "33.33%",
+    width: "33.3333%",
     aspectRatio: 1,
-    padding: 2,
+    padding: 1,
   },
-  gridImg: { width: "100%", height: "100%", borderRadius: 4 },
+  gridImg: { width: "100%", height: "100%" },
   gridPlaceholder: {
     flex: 1,
-    borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
+  },
+  videoBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 40,
+  },
+  emptyStateText: {
+    marginTop: 10,
   },
   eventCard: { overflow: "hidden" },
   eventCover: { width: "100%", height: "80%", borderRadius: 4 },
