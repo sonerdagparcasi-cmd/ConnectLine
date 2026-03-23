@@ -16,6 +16,7 @@ import {
   FlatList,
   Image,
   PanResponder,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -166,6 +167,8 @@ function SocialPostCard({
   const likeScale = useSharedValue(1);
   const seekAnim = useSharedValue(0);
   const videoRefs = useRef<Record<string, Video | null>>({});
+  const mediaRef = useRef<FlatList<SocialMediaItem> | null>(null);
+  const thumbRef = useRef<FlatList<SocialMediaItem> | null>(null);
   const panRespondersRef = useRef<Record<string, ReturnType<typeof PanResponder.create>>>({});
   const progressWidthsRef = useRef<Record<string, number>>({});
   const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -194,6 +197,15 @@ function SocialPostCard({
   useEffect(() => {
     setActiveIndex(0);
   }, [livePost.id]);
+
+  useEffect(() => {
+    if (!thumbRef.current || media.length <= 1) return;
+    thumbRef.current.scrollToIndex({
+      index: activeIndex,
+      animated: true,
+      viewPosition: 0.5,
+    });
+  }, [activeIndex, media.length]);
 
   useEffect(() => {
     if (!showControls) return;
@@ -242,6 +254,12 @@ function SocialPostCard({
     const next = Math.round(e.nativeEvent.contentOffset.x / carouselWidth);
     const clamped = Math.max(0, Math.min(next, media.length - 1));
     setActiveIndex(clamped);
+  }
+
+  function selectMediaIndex(index: number) {
+    if (index < 0 || index >= media.length) return;
+    setActiveIndex(index);
+    mediaRef.current?.scrollToIndex({ index, animated: true });
   }
 
   function onLikePress() {
@@ -593,10 +611,13 @@ function SocialPostCard({
       >
         {media.length > 0 ? (
           <FlatList
+            ref={mediaRef}
             data={media}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            initialNumToRender={2}
+            windowSize={3}
             keyExtractor={(item) => item.id}
             renderItem={renderMedia}
             onMomentumScrollEnd={handleMomentumEnd}
@@ -628,6 +649,42 @@ function SocialPostCard({
         ) : null}
 
       </View>
+      {media.length > 1 ? (
+        <FlatList
+          ref={thumbRef}
+          data={media}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.thumbnailStrip}
+          initialNumToRender={2}
+          windowSize={3}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.thumbnailStripContent}
+          getItemLayout={(_, index) => ({
+            length: 68,
+            offset: 68 * index,
+            index,
+          })}
+          renderItem={({ item: m, index: i }) => (
+            <TouchableOpacity
+              key={m.id}
+              onPress={() => selectMediaIndex(i)}
+              activeOpacity={0.8}
+              style={[
+                styles.thumbnailItem,
+                i === activeIndex ? styles.thumbnailItemActive : undefined,
+              ]}
+            >
+              <Image source={{ uri: m.uri }} style={styles.thumbnailImage} />
+              {m.type === "video" ? (
+                <View style={styles.thumbnailVideoBadge}>
+                  <Ionicons name="videocam" size={10} color="#fff" />
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          )}
+        />
+      ) : null}
 
       <View style={styles.actionsRow}>
         <View style={styles.actionBtn}>
@@ -835,6 +892,35 @@ const styles = StyleSheet.create({
   progressFill: {
     height: 3,
     backgroundColor: "#fff",
+  },
+  thumbnailStrip: {
+    marginTop: 8,
+  },
+  thumbnailStripContent: {
+    paddingHorizontal: 8,
+    gap: 8,
+  },
+  thumbnailItem: {
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 0,
+    borderColor: "#00bfff",
+  },
+  thumbnailItemActive: {
+    borderWidth: 2,
+  },
+  thumbnailImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+  },
+  thumbnailVideoBadge: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 4,
+    padding: 2,
   },
   timeTopRight: {
     position: "absolute",
