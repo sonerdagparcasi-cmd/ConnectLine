@@ -589,6 +589,7 @@ export function toggleLikeForUser(userId: string, postId: string): { liked: bool
   const post = POST_MAP[postId];
   if (!post) return { liked: false };
   if (!likedPostIdsByUser[userId]) likedPostIdsByUser[userId] = [];
+  const currentUserId = "u1"; // geçici
 
   const alreadyLiked = likedPostIdsByUser[userId].includes(postId);
   const nextLiked = !alreadyLiked;
@@ -605,15 +606,15 @@ export function toggleLikeForUser(userId: string, postId: string): { liked: bool
   emitEvent({
     type: nextLiked ? "LIKE" : "UNLIKE",
     postId,
-    userId: me,
+    userId: currentUserId,
     targetUserId: post.userId,
-    actorUsername: getSocialDisplayName(me),
+    actorUsername: getSocialDisplayName(currentUserId),
   });
 
-  if (nextLiked && post.userId && post.userId !== me) {
+  if (nextLiked && post.userId && post.userId !== currentUserId) {
     pushLikeNotification({
       postId,
-      userId: me,
+      userId: currentUserId,
       targetId: post.userId,
     });
   }

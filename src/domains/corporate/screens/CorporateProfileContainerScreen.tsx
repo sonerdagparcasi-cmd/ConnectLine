@@ -55,6 +55,13 @@ export default function CorporateProfileContainerScreen() {
 
   const isPrivateForVisitor = visibility === "private" && !isOwner;
   const canShowVisitorActions = isOwner || visibility === "public";
+  const displayName = norm(profileView?.displayName) || norm(company?.name);
+  const aboutValue = norm(profileView?.about);
+
+  useEffect(() => {
+    setEditCompanyName(displayName);
+    setEditAbout(aboutValue);
+  }, [displayName, aboutValue]);
 
   if (!company || !profileView || isPrivateForVisitor) {
     return (
@@ -87,8 +94,6 @@ export default function CorporateProfileContainerScreen() {
     );
   }
 
-  const displayName = norm(profileView.displayName) || norm(company.name);
-
   const displayTitle =
     norm(profileView.displayTitle) ||
     norm(company.sector) ||
@@ -101,11 +106,6 @@ export default function CorporateProfileContainerScreen() {
   const activeJobs = 12;
 
   const growth30 = Math.round(followers * 0.07);
-
-  useEffect(() => {
-    setEditCompanyName(displayName);
-    setEditAbout(norm(profileView.about));
-  }, [displayName, profileView.about]);
 
   const recruiterStatus =
     activeJobs > 0
