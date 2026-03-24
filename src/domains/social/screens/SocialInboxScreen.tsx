@@ -109,7 +109,7 @@ export default function SocialInboxScreen() {
                     minWidth: 20,
                     height: 20,
                     borderRadius: 10,
-                    backgroundColor: colors.primary,
+                    backgroundColor: "#FF3B30", // iOS kırmızı
                     justifyContent: "center",
                     alignItems: "center",
                     paddingHorizontal: 6,

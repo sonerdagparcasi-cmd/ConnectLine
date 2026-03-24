@@ -245,17 +245,19 @@ export function addReply(
   reply: { userId: string; text: string; username?: string; targetUserId?: string }
 ) {
   if (!reply.text.trim()) return null;
-  const sender = getUserDisplay(reply.userId);
+  const senderUserId = (reply.userId ?? "").trim();
+  if (!senderUserId) return null;
+  const sender = getUserDisplay(senderUserId);
   const created = addStoryReply(
     storyId,
-    reply.userId,
+    senderUserId,
     reply.username ?? sender.username,
     reply.text.trim(),
     reply.targetUserId
   );
   socialMessageService.pushMessage({
     type: "story_reply",
-    userId: reply.userId,
+    userId: senderUserId,
     text: reply.text.trim(),
     storyId,
     targetUserId: reply.targetUserId,

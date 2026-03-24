@@ -66,9 +66,10 @@ export const socialMessageService = {
   },
 
   pushMessage(input: PushMessageInput) {
+    const senderId = input.userId; // gönderen
     const message: SocialMessage = {
       id: input.id ?? `msg_${Date.now()}`,
-      senderId: input.userId,
+      senderId,
       receiverId: input.targetUserId ?? "u1",
       text: input.text,
       type: input.type,
@@ -83,17 +84,14 @@ export const socialMessageService = {
     };
     MESSAGES.unshift(message);
 
-    const existing = conversations.find((c) => c.userId === input.userId);
+    let existing = conversations.find((c) => c.userId === senderId);
     if (existing) {
-      // duplicate kontrol
-      if (existing.lastMessage?.id === lastMessage.id) return;
-
       existing.lastMessage = lastMessage;
-      existing.unreadCount += 1;
+      existing.unreadCount = (existing.unreadCount || 0) + 1;
     } else {
       conversations.unshift({
         id: Date.now().toString(),
-        userId: input.userId,
+        userId: senderId,
         lastMessage,
         unreadCount: 1,
       });

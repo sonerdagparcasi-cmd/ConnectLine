@@ -57,11 +57,14 @@ export const socialNotificationService = {
     postId?: string;
     message?: string;
   }) {
+    const actorUserId = (notification.userId ?? "").trim();
+    if (!actorUserId) return;
+
     const item: SocialNotification = {
       id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: (notification.type as SocialNotification["type"]) ?? "like",
-      actorUserId: notification.userId ?? "u1",
-      actorUsername: notification.userId ?? "u1",
+      actorUserId,
+      actorUsername: actorUserId,
       actorAvatarUri: null,
       targetUserId: notification.targetId ?? "u1",
       storyId: notification.storyId,
@@ -555,7 +558,8 @@ function syncToInbox(notification: {
   text?: string;
   emoji?: string;
 }) {
-  const userId = notification.userId ?? notification.actorUserId;
+  const userId = (notification.userId ?? notification.actorUserId ?? "").trim();
+  if (!userId) return;
 
   if (notification.type === "story_emoji") {
     socialMessageService.pushMessage({
