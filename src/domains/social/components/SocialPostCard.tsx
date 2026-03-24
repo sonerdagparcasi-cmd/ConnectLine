@@ -32,11 +32,13 @@ import { t } from "../../../shared/i18n/t";
 import {
   deletePost,
   getPostById,
+  isLiked,
+  isSaved,
   subscribeFeed,
   toggleComments,
   toggleLikeVisibility,
-  toggleLikePost,
-  toggleSavePost,
+  toggleLikeForUser,
+  toggleSaveForUser,
 } from "../services/socialFeedStateService";
 import { getCurrentSocialUserId } from "../services/socialFollowService";
 import type { SocialMediaItem, SocialPost } from "../types/social.types";
@@ -71,10 +73,10 @@ function formatPostTime(dateString?: string) {
   const diffHour = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHour / 24);
 
-  if (diffMin < 1) return "Simdi";
+  if (diffMin < 1) return t("social.now");
   if (diffMin < 60) return `${diffMin} dk once`;
   if (diffHour < 24) return `${diffHour} sa once`;
-  if (diffDay === 1) return "Dun";
+  if (diffDay === 1) return t("social.yesterday");
   if (diffDay < 7) return `${diffDay} gun once`;
 
   return (
@@ -171,9 +173,10 @@ function SocialPostCard({
   const livePost = getPostById(post.id) ?? post;
   const media = livePost.media ?? [];
   const activeMedia = media[activeIndex];
-  const liked = !!livePost.likedByMe;
-  const saved = !!livePost.savedByMe;
-  const isOwner = livePost.userId === getCurrentSocialUserId();
+  const currentUserId = getCurrentSocialUserId();
+  const liked = isLiked(currentUserId, livePost.id) || !!livePost.likedByMe;
+  const saved = isSaved(currentUserId, livePost.id) || !!livePost.savedByMe;
+  const isOwner = livePost.userId === currentUserId;
   const commentsDisabled =
     livePost.commentsDisabled === true ||
     (livePost.settings?.commentsEnabled ?? livePost.settings?.comments) === false;
@@ -277,7 +280,7 @@ function SocialPostCard({
     if (onToggleLike) {
       onToggleLike();
     } else {
-      toggleLikePost(livePost.id);
+      toggleLikeForUser(currentUserId, livePost.id);
     }
   }
 
@@ -286,7 +289,7 @@ function SocialPostCard({
       onToggleSave();
       return;
     }
-    toggleSavePost(livePost.id);
+    toggleSaveForUser(currentUserId, livePost.id);
   }
 
   async function handleShare() {
@@ -306,7 +309,7 @@ function SocialPostCard({
 
   function openComments() {
     if (commentsDisabled) {
-      Alert.alert(t("social.notifications"), "Comments are disabled");
+      Alert.alert(t("social.notifications"), t("social.commentsDisabled"));
       return;
     }
     if (onPressComments) {
@@ -332,11 +335,11 @@ function SocialPostCard({
         onPress: () => deletePost(livePost.id),
       },
       {
-        text: commentsDisabled ? "Enable Comments" : "Disable Comments",
+        text: commentsDisabled ? t("social.enableComments") : t("social.disableComments"),
         onPress: () => toggleComments(livePost.id),
       },
       {
-        text: likeCountHidden ? "Show Likes" : "Hide Likes",
+        text: likeCountHidden ? t("social.showLikes") : t("social.hideLikes"),
         onPress: () => toggleLikeVisibility(livePost.id),
       },
       { text: t("common.cancel"), style: "cancel" },
@@ -450,7 +453,7 @@ function SocialPostCard({
       if (onToggleLike) {
         onToggleLike();
       } else {
-        toggleLikePost(livePost.id);
+        toggleLikeForUser(currentUserId, livePost.id);
       }
     }
     triggerLikeAnimation();

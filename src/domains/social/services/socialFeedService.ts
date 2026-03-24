@@ -185,6 +185,47 @@ export const socialFeedService = {
       hasMore: end < allPosts.length,
     };
   },
+  toggleLike(userId: string, postId: string, targetId?: string) {
+    // Lazy resolve to avoid hard circular import at module init.
+    const feedState = require("./socialFeedStateService") as typeof import("./socialFeedStateService");
+    const res = feedState.toggleLikeForUser(userId, postId);
+    if (res.liked && targetId && targetId !== userId) {
+      socialNotificationService.push({
+        type: "like",
+        postId,
+        userId,
+        targetId,
+        message: "liked_your_post",
+      });
+    }
+    return res;
+  },
+  toggleSave(userId: string, postId: string) {
+    const feedState = require("./socialFeedStateService") as typeof import("./socialFeedStateService");
+    return feedState.toggleSaveForUser(userId, postId);
+  },
+  addComment(
+    postId: string,
+    comment: { userId: string; username?: string; text: string },
+    targetId?: string
+  ) {
+    const feedState = require("./socialFeedStateService") as typeof import("./socialFeedStateService");
+    const created = feedState.addComment(postId, {
+      userId: comment.userId,
+      username: comment.username ?? comment.userId,
+      text: comment.text,
+    });
+    if (targetId && targetId !== comment.userId) {
+      socialNotificationService.push({
+        type: "comment",
+        postId,
+        userId: comment.userId,
+        targetId,
+        message: "commented_on_post",
+      });
+    }
+    return created;
+  },
 };
 
 /* ------------------------------------------------------------------ */

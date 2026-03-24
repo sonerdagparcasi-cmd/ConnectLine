@@ -155,10 +155,10 @@ export default function SocialProfileContainerScreen() {
     (id: string) => {
       if (id === "follow") {
         sendFollowRequest("me", profile.userId);
-      } else if (id === "message") Alert.alert("", "Mesaj (UI-only)");
-      else if (id === "shareProfile") Alert.alert("", "Profili paylaş (UI-only)");
-      else if (id === "blockUser") Alert.alert("", "Engelle (UI-only)");
-      else if (id === "reportUser") Alert.alert("", "Bildir (UI-only)");
+      } else if (id === "message") Alert.alert("", t("message"));
+      else if (id === "shareProfile") Alert.alert("", t("social.shareProfile"));
+      else if (id === "blockUser") Alert.alert("", t("social.block"));
+      else if (id === "reportUser") Alert.alert("", t("social.report"));
     },
     [profile.userId]
   );
@@ -266,7 +266,7 @@ export default function SocialProfileContainerScreen() {
                       style={styles.textAction}
                       onPress={handleFollow}
                     >
-                      <Text style={[styles.baseText, { color: primaryText }]}>Takip Et</Text>
+                      <Text style={[styles.baseText, { color: primaryText }]}>{t("follow")}</Text>
                     </TouchableOpacity>
                   )}
 
@@ -276,7 +276,7 @@ export default function SocialProfileContainerScreen() {
                       style={styles.textAction}
                       onPress={handleFollow}
                     >
-                      <Text style={[styles.baseText, { color: primaryText }]}>Takibi Bırak</Text>
+                      <Text style={[styles.baseText, { color: primaryText }]}>{t("following")}</Text>
                     </TouchableOpacity>
                   )}
 
@@ -285,10 +285,10 @@ export default function SocialProfileContainerScreen() {
                     style={styles.textAction}
                     onPress={() => {
                       blockUser(profile.userId);
-                      Alert.alert("", "Kullanıcı engellendi");
+                      Alert.alert("", t("social.userBlocked"));
                     }}
                   >
-                    <Text style={[styles.baseText, { color: dangerText }]}>Engelle</Text>
+                    <Text style={[styles.baseText, { color: dangerText }]}>{t("social.block")}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -391,7 +391,7 @@ export default function SocialProfileContainerScreen() {
           style={[styles.gridItem, { backgroundColor: T.cardBg }]}
           activeOpacity={0.9}
           onPress={handleOpenPost}
-          onLongPress={() => Alert.alert("Post seçenekleri")}
+          onLongPress={() => Alert.alert(t("social.postOptions"))}
         >
           {media?.uri ? (
             <>
@@ -494,7 +494,7 @@ export default function SocialProfileContainerScreen() {
     () => (
       <View style={styles.emptyState}>
         <Ionicons name="images-outline" size={40} color={T.mutedText} />
-        <Text style={[styles.emptyStateText, { color: T.mutedText }]}>Henüz paylaşım yok</Text>
+        <Text style={[styles.emptyStateText, { color: T.mutedText }]}>{t("no_posts")}</Text>
       </View>
     ),
     [T.mutedText]
@@ -526,7 +526,7 @@ export default function SocialProfileContainerScreen() {
             onPress={() => {
               unblockUser(profile.userId);
               setBlocked(false);
-              Alert.alert("", "Engel kaldırıldı");
+              Alert.alert("", t("social.unblockSuccess"));
             }}
           >
             <Text style={[styles.blockedPrimaryBtnText, { color: primaryText }]}>

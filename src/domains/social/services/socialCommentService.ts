@@ -19,9 +19,10 @@ export type Comment = SocialComment;
  * Yorum ekler; feed’deki `commentCount` / önizleme güncellenir.
  * Bildirim: `socialFeedStateService.addComment` → `notifyPostCommented` (tek kaynak).
  */
-export function addComment(postId: string, text: string): void {
-  if (!text.trim()) return;
-  const currentUserId = getCurrentSocialUserId();
+export function addComment(postId: string, userIdOrText: string, maybeText?: string): void {
+  const text = (maybeText ?? userIdOrText).trim();
+  if (!text) return;
+  const currentUserId = maybeText ? userIdOrText : getCurrentSocialUserId();
   const post = getPostById(postId);
   addCommentToFeed(postId, {
     userId: currentUserId,

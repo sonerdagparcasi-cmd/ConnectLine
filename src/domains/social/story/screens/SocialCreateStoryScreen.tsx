@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { t } from "../../../../shared/i18n/t";
 
 import type { SocialStackParamList } from "../../navigation/SocialNavigator";
 
@@ -26,7 +27,7 @@ export default function SocialCreateStoryScreen() {
   async function pickAndOpenEditor() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Galeri izni gerekli");
+      Alert.alert(t("social.galleryPermissionRequired"));
       return;
     }
 
@@ -75,7 +76,7 @@ export default function SocialCreateStoryScreen() {
           textAlign: "center",
         }}
       >
-        Story Oluştur
+        {t("social.story.create")}
       </Text>
       <Text
         style={{
@@ -85,7 +86,7 @@ export default function SocialCreateStoryScreen() {
           textAlign: "center",
         }}
       >
-        Medya seç; tam ekran editörde yazı ekle ve paylaş.
+        {t("social.story.createHint")}
       </Text>
 
       <TouchableOpacity
@@ -100,7 +101,7 @@ export default function SocialCreateStoryScreen() {
         }}
       >
         <Text style={{ color: colors.onPrimary, fontWeight: "700", fontSize: 16 }}>
-          {picking ? "…" : "📸 Medya Seç"}
+          {picking ? t("loading") : t("social.story.pickMedia")}
         </Text>
       </TouchableOpacity>
     </View>

@@ -181,9 +181,9 @@ export default function SocialStoryViewerScreen() {
 
   const meName = useMemo(() => {
     const raw = profile?.username?.trim();
-    if (!raw) return "Sen";
+    if (!raw) return t("social.you");
     const parts = raw.split(/\s+/).filter(Boolean);
-    if (parts.length <= 1) return parts[0] ?? "Sen";
+    if (parts.length <= 1) return parts[0] ?? t("social.you");
     return `${parts[0]} ${parts[1][0]}`;
   }, [profile?.username]);
 
@@ -198,7 +198,7 @@ export default function SocialStoryViewerScreen() {
     const ts = new Date(createdAt).getTime();
     if (!Number.isFinite(ts)) return "";
     const diffMin = Math.max(0, Math.floor((Date.now() - ts) / 60000));
-    if (diffMin < 1) return "şimdi";
+    if (diffMin < 1) return t("social.now");
     if (diffMin < 60) return `${diffMin} dk`;
     const h = Math.floor(diffMin / 60);
     return `${h} sa`;
@@ -352,7 +352,7 @@ export default function SocialStoryViewerScreen() {
     addStoryReaction(
       current.id,
       currentUserId,
-      profile?.username ?? "Sen",
+      profile?.username ?? t("social.you"),
       emoji,
       group.userId
     );
@@ -405,7 +405,7 @@ export default function SocialStoryViewerScreen() {
           <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Story yok</Text>
+          <Text style={styles.emptyText}>{t("social.story.empty")}</Text>
         </View>
       </View>
     );
@@ -771,7 +771,7 @@ export default function SocialStoryViewerScreen() {
                 socialStoryStateService.addReply(story.id, {
                   userId: currentUserId,
                   text,
-                  username: profile?.username ?? "Sen",
+                  username: profile?.username ?? t("social.you"),
                   targetUserId: group.userId,
                 });
                 sendSocialMessage({
@@ -818,7 +818,7 @@ export default function SocialStoryViewerScreen() {
               });
             }}
           >
-            <Text style={styles.menuItem}>Düzenle</Text>
+            <Text style={styles.menuItem}>{t("social.feed.edit")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -828,11 +828,11 @@ export default function SocialStoryViewerScreen() {
               navigation.goBack();
             }}
           >
-            <Text style={[styles.menuItem, { color: "red" }]}>Sil</Text>
+            <Text style={[styles.menuItem, { color: "red" }]}>{t("social.feed.delete")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => setMenuOpen(false)}>
-            <Text style={styles.menuItem}>İptal</Text>
+            <Text style={styles.menuItem}>{t("common.cancel")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -849,7 +849,7 @@ export default function SocialStoryViewerScreen() {
             <View style={styles.statsHandle} />
 
             <View style={styles.statsHeader}>
-              <Text style={styles.statsHeaderTitle}>İstatistikler</Text>
+              <Text style={styles.statsHeaderTitle}>{t("social.storyInsights")}</Text>
               <TouchableOpacity
                 onPress={() => setShowStats(false)}
                 style={styles.statsHeaderClose}
@@ -876,7 +876,7 @@ export default function SocialStoryViewerScreen() {
 
             {isOwner ? (
               <>
-                <Text style={styles.sectionTitle}>Görüntüleyenler</Text>
+                <Text style={styles.sectionTitle}>{t("social.story.viewersTitle")}</Text>
                 <FlatList
                   data={seenListForUi}
                   keyExtractor={(i, idx) => `seen-${i.userId}-${i.seenAt || idx}`}
@@ -911,7 +911,7 @@ export default function SocialStoryViewerScreen() {
                   }}
                 />
 
-                <Text style={styles.sectionTitle}>Beğenenler</Text>
+                <Text style={styles.sectionTitle}>{t("social.story.likers")}</Text>
                 <FlatList
                   data={meta.likedBy ?? []}
                   keyExtractor={(i) => `like-${i}`}

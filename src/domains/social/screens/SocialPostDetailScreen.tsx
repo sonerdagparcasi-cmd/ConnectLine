@@ -40,10 +40,10 @@ import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import {
   canAddComment,
   getPostById,
-  isPostSaved,
+  isSaved,
+  toggleLikeForUser,
+  toggleSaveForUser,
   subscribeFeed,
-  toggleLike as toggleLikePost,
-  toggleSavedPost,
 } from "../services/socialFeedStateService";
 import {
   addComment,
@@ -137,7 +137,8 @@ export default function SocialPostDetailScreen() {
     return () => clearTimeout(timeout);
   }, [origin, screen.height, screen.width, transitionHeight, transitionScale, transitionWidth, transitionX, transitionY]);
 
-  const saved = post ? isPostSaved(post.id) : false;
+  const currentUserId = getCurrentSocialUserId();
+  const saved = post ? isSaved(currentUserId, post.id) : false;
   const liked = post?.likedByMe ?? false;
   const commentsOpen =
     post?.commentsDisabled !== true &&
@@ -154,12 +155,12 @@ export default function SocialPostDetailScreen() {
 
   function handleToggleLike() {
     if (!post) return;
-    toggleLikePost(post.id);
+    toggleLikeForUser(currentUserId, post.id);
   }
 
   function handleToggleSave() {
     if (!post) return;
-    toggleSavedPost(post.id);
+    toggleSaveForUser(currentUserId, post.id);
   }
 
   function openPostMenu() {
@@ -172,17 +173,17 @@ export default function SocialPostDetailScreen() {
   function openReportPost() {
     if (!post) return;
     Alert.alert(
-      "Bildir",
+      t("social.report"),
       undefined,
       [
         ...REPORT_REASONS.map((r) => ({
           text: r.labelTr,
           onPress: () => {
             reportPost(post.id, r.value);
-            Alert.alert("", "Bildirimin alındı");
+            Alert.alert("", t("social.reportReceived"));
           },
         })),
-        { text: "İptal", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
       ]
     );
   }
@@ -190,21 +191,21 @@ export default function SocialPostDetailScreen() {
   function handleBlockAuthor() {
     if (!post) return;
     blockUser(post.userId);
-    Alert.alert("", "Kullanıcı engellendi");
+    Alert.alert("", t("social.userBlocked"));
     navigation.goBack();
   }
 
   function submitComment() {
     if (!commentText.trim() || !post) return;
     if ((post.settings?.commentsEnabled ?? post.settings?.comments) === false) {
-      Alert.alert(t("social.notifications"), "Bu gönderide yorumlar kapalı.");
+      Alert.alert(t("social.notifications"), t("social.commentsDisabled"));
       return;
     }
     if (!canAddComment(post.id)) {
       Alert.alert(t("social.notifications"), t("social.restricted"));
       return;
     }
-    addComment(post.id, commentText);
+    addComment(post.id, currentUserId, commentText);
     setCommentText("");
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -213,10 +214,10 @@ export default function SocialPostDetailScreen() {
 
   function handleDeleteComment(commentId: string) {
     if (!post) return;
-    Alert.alert(t("social.postDetail.title"), "Yorumu silmek istiyor musun?", [
+    Alert.alert(t("social.postDetail.title"), t("social.deleteCommentConfirm"), [
       { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Sil",
+        text: t("social.feed.delete"),
         style: "destructive",
         onPress: () => {
           deleteComment(post.id, commentId);
@@ -230,27 +231,27 @@ export default function SocialPostDetailScreen() {
       <SocialScreenLayout title={t("social.postDetail.title")}>
         <View style={[styles.header, { borderBottomColor: T.border }]}>
           <Text style={{ color: T.mutedText }}>
-            {t("social.postDetail.title")} bulunamadı
+            {t("social.notFound")}
           </Text>
         </View>
       </SocialScreenLayout>
     );
   }
 
-  const isOwner = post.userId === getCurrentSocialUserId();
+  const isOwner = post.userId === currentUserId;
 
   if (!isOwner && isUserBlocked(post.userId)) {
     return (
       <SocialScreenLayout title={t("social.postDetail.title")}>
         <View style={styles.archivedBox}>
           <Text style={[styles.archivedTitle, { color: T.textColor }]}>
-            Bu kullanıcıyı engellediniz.
+            {t("social.userBlocked")}
           </Text>
           <Text style={[styles.archivedSub, { color: T.mutedText }]}>
-            Gönderi gizlendi. Engeli kaldırmak için profil ayarlarından yönetebilirsiniz.
+            {t("social.postHiddenBecauseBlocked")}
           </Text>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.archivedBack}>
-            <Text style={{ color: T.mutedText, fontSize: 14, fontWeight: "600" }}>Geri</Text>
+            <Text style={{ color: T.mutedText, fontSize: 14, fontWeight: "600" }}>{t("social.back")}</Text>
           </TouchableOpacity>
         </View>
       </SocialScreenLayout>
@@ -262,12 +263,12 @@ export default function SocialPostDetailScreen() {
       <SocialScreenLayout title={t("social.postDetail.title")}>
         <View style={styles.archivedBox}>
           <Text style={[styles.archivedTitle, { color: T.textColor }]}>
-            Bu paylaşım arşivlendi.
+            {t("social.postArchived")}
           </Text>
           <Text style={[styles.archivedSub, { color: T.mutedText }]}>
             {isOwner
-              ? "Düzenleyerek tekrar yayına alabilir veya silebilirsiniz."
-              : "Bu içerik şu an görüntülenemiyor."}
+              ? t("social.postArchivedOwnerHint")
+              : t("social.postUnavailable")}
           </Text>
           {isOwner ? (
             <TouchableOpacity
@@ -275,11 +276,11 @@ export default function SocialPostDetailScreen() {
               style={styles.archivedAction}
               hitSlop={8}
             >
-              <Text style={{ color: T.accent, fontSize: 15, fontWeight: "700" }}>Düzenle</Text>
+              <Text style={{ color: T.accent, fontSize: 15, fontWeight: "700" }}>{t("social.feed.edit")}</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.archivedBack}>
-            <Text style={{ color: T.mutedText, fontSize: 14, fontWeight: "600" }}>Geri</Text>
+            <Text style={{ color: T.mutedText, fontSize: 14, fontWeight: "600" }}>{t("social.back")}</Text>
           </TouchableOpacity>
         </View>
       </SocialScreenLayout>
@@ -354,7 +355,7 @@ export default function SocialPostDetailScreen() {
             style={{ marginRight: 10 }}
             hitSlop={8}
           >
-            <Text style={{ color: T.accent, fontSize: 14, fontWeight: "700" }}>Düzenle</Text>
+            <Text style={{ color: T.accent, fontSize: 14, fontWeight: "700" }}>{t("social.feed.edit")}</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -392,7 +393,7 @@ export default function SocialPostDetailScreen() {
             else
               Alert.alert(
                 t("social.notifications"),
-                "Bu gönderide yorumlar kapalı."
+                t("social.commentsDisabled")
               );
           }}
           style={styles.actionBtn}
@@ -408,10 +409,10 @@ export default function SocialPostDetailScreen() {
       {!isOwner ? (
         <View style={[styles.modRow, { borderBottomColor: T.border }]}>
           <TouchableOpacity onPress={openReportPost} hitSlop={8}>
-            <Text style={[styles.modLink, { color: T.mutedText }]}>Bildir</Text>
+            <Text style={[styles.modLink, { color: T.mutedText }]}>{t("social.report")}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleBlockAuthor} hitSlop={8}>
-            <Text style={[styles.modLink, { color: T.mutedText }]}>Engelle</Text>
+            <Text style={[styles.modLink, { color: T.mutedText }]}>{t("social.block")}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -431,7 +432,7 @@ export default function SocialPostDetailScreen() {
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           <Text style={[styles.emptyComments, { color: T.mutedText }]}>
-            Henüz yorum yok. İlk yorumu siz yazın.
+            {t("social.noCommentsYet")}
           </Text>
         }
         renderItem={({ item }) => (
@@ -454,7 +455,7 @@ export default function SocialPostDetailScreen() {
               <Text style={{ color: T.textColor, fontWeight: "600" }}>
                 {item.username}
               </Text>
-              {post && (item.userId === getCurrentSocialUserId() || post.userId === getCurrentSocialUserId()) ? (
+              {post && (item.userId === currentUserId || post.userId === currentUserId) ? (
                 <TouchableOpacity
                   onPress={() => handleDeleteComment(item.id)}
                   hitSlop={8}
@@ -492,7 +493,7 @@ export default function SocialPostDetailScreen() {
               ref={inputRef}
               value={commentText}
               onChangeText={setCommentText}
-              placeholder="Yorum yaz..."
+              placeholder={t("add_comment_placeholder")}
               placeholderTextColor={T.mutedText}
               style={[
                 styles.input,
@@ -515,7 +516,7 @@ export default function SocialPostDetailScreen() {
                   fontWeight: "700",
                 }}
               >
-                Gönder
+                {t("send")}
               </Text>
             </TouchableOpacity>
           </View>

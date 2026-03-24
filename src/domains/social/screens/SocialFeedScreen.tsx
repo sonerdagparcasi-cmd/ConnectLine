@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
+import { t } from "../../../shared/i18n/t";
 import SocialNotificationBell from "../components/SocialNotificationBell";
 import SocialPostCard from "../components/SocialPostCard";
 import SocialPostSkeleton from "../components/SocialPostSkeleton";
@@ -111,7 +112,7 @@ export default function SocialFeedScreen() {
   if (visiblePosts.length === 0) {
     return (
       <View style={[styles.root, styles.emptyCenter, { backgroundColor: T.backgroundColor }]}>
-        <Text style={{ color: T.textColor }}>Henüz paylaşım yok</Text>
+        <Text style={{ color: T.textColor }}>{t("no_posts")}</Text>
       </View>
     );
   }

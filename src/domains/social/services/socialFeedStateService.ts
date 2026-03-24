@@ -101,6 +101,9 @@ let hasMore = true;
 /* ------------------------------------------------------------------ */
 
 let COMMENTS: Record<string, SocialComment[]> = {};
+let likedPostIdsByUser: Record<string, string[]> = {};
+let savedPostIdsByUser: Record<string, string[]> = {};
+let commentsByPostId: Record<string, SocialComment[]> = {};
 
 /* ------------------------------------------------------------------ */
 /* LISTENERS                                                          */
@@ -158,6 +161,9 @@ async function initStore() {
   POST_MAP = {};
   POST_ORDER = [];
   COMMENTS = {};
+  likedPostIdsByUser = {};
+  savedPostIdsByUser = {};
+  commentsByPostId = {};
 
   merged.forEach((p) => {
     POST_MAP[p.id] = p;
@@ -168,6 +174,15 @@ async function initStore() {
         ...c,
         postId: c.postId ?? p.id,
       }));
+      commentsByPostId[p.id] = COMMENTS[p.id];
+    }
+    const owner = p.userId || getCurrentSocialUserId();
+    if (p.likedByMe) {
+      likedPostIdsByUser[owner] = [...(likedPostIdsByUser[owner] || []), p.id];
+    }
+    if (p.savedByMe) {
+      const me = getCurrentSocialUserId();
+      savedPostIdsByUser[me] = [...(savedPostIdsByUser[me] || []), p.id];
     }
   });
 
@@ -566,36 +581,43 @@ export function replaceFeedPosts(nextPosts: SocialPost[]) {
 
 /** Beğen / beğeniyi kaldır; sayaç ve `likedByMe` güncellenir, abonelere bildirilir. */
 export function toggleLike(postId: string): void {
-  const post = POST_MAP[postId];
-  if (!post) return;
+  const me = getCurrentSocialUserId();
+  toggleLikeForUser(me, postId);
+}
 
-  const wasLiked = post.likedByMe;
+export function toggleLikeForUser(userId: string, postId: string): { liked: boolean } {
+  const post = POST_MAP[postId];
+  if (!post) return { liked: false };
+  if (!likedPostIdsByUser[userId]) likedPostIdsByUser[userId] = [];
+
+  const alreadyLiked = likedPostIdsByUser[userId].includes(postId);
+  const nextLiked = !alreadyLiked;
+  likedPostIdsByUser[userId] = alreadyLiked
+    ? likedPostIdsByUser[userId].filter((id) => id !== postId)
+    : [...likedPostIdsByUser[userId], postId];
+
   const n = post.likeCount ?? 0;
-  const next = {
-    ...post,
-    likedByMe: !post.likedByMe,
-    likeCount: post.likedByMe ? Math.max(0, n - 1) : n + 1,
-  };
+  const next = { ...post, likedByMe: nextLiked, likeCount: nextLiked ? n + 1 : Math.max(0, n - 1) };
   POST_MAP[postId] = next;
   invalidateCache();
   emit();
 
-  const me = getCurrentSocialUserId();
   emitEvent({
-    type: next.likedByMe ? "LIKE" : "UNLIKE",
+    type: nextLiked ? "LIKE" : "UNLIKE",
     postId,
     userId: me,
     targetUserId: post.userId,
     actorUsername: getSocialDisplayName(me),
   });
 
-  if (next.likedByMe && post.userId && post.userId !== me) {
+  if (nextLiked && post.userId && post.userId !== me) {
     pushLikeNotification({
       postId,
       userId: me,
       targetId: post.userId,
     });
   }
+  return { liked: nextLiked };
 }
 
 /** `toggleLike` ile aynı — API uyumluluğu (interaction core). Beğeni bildirimi `toggleLike` içinde `notifyPostLiked`. */
@@ -608,7 +630,7 @@ export function toggleLikePost(postId: string): void {
 /* ------------------------------------------------------------------ */
 
 export function getComments(postId: string): SocialComment[] {
-  return COMMENTS[postId] ?? [];
+  return commentsByPostId[postId] ?? COMMENTS[postId] ?? [];
 }
 
 export function addComment(
@@ -623,12 +645,13 @@ export function addComment(
     createdAt: new Date().toISOString(),
   };
 
-  const list = COMMENTS[postId] ?? [];
-  COMMENTS[postId] = [newComment, ...list];
+  const list = commentsByPostId[postId] ?? COMMENTS[postId] ?? [];
+  commentsByPostId[postId] = [newComment, ...list];
+  COMMENTS[postId] = commentsByPostId[postId];
 
   if (post) {
     post.commentCount = (post.commentCount ?? 0) + 1;
-    const preview = COMMENTS[postId].slice(0, 3);
+    const preview = commentsByPostId[postId].slice(0, 3);
     post.commentsPreview = preview;
     invalidateCache();
   }
@@ -663,6 +686,7 @@ export function deleteComment(postId: string, commentId: string): void {
   if (next.length === existing.length) return;
 
   COMMENTS[postId] = next;
+  commentsByPostId[postId] = next;
   post.commentCount = Math.max(0, (post.commentCount ?? 0) - 1);
   post.commentsPreview = next.slice(0, 3);
   invalidateCache();
@@ -696,36 +720,39 @@ export function resetFeedPosts() {
 /* ------------------------------------------------------------------ */
 
 export function toggleSave(postId: string): void {
-  toggleSavePost(postId);
+  const me = getCurrentSocialUserId();
+  toggleSaveForUser(me, postId);
 }
 
 export function toggleSavedPost(postId: string) {
-  toggleSavePost(postId);
+  const me = getCurrentSocialUserId();
+  return toggleSaveForUser(me, postId);
 }
 
 export function toggleSavePost(postId: string) {
-  const post = POST_MAP[postId];
-  if (!post) return;
   const me = getCurrentSocialUserId();
+  return toggleSaveForUser(me, postId);
+}
 
-  if (post.savedByMe) {
-    POST_MAP[postId] = {
-      ...post,
-      savedByMe: false,
-      saveCount: Math.max(0, (post.saveCount ?? 1) - 1),
-    };
-    emitEvent({ type: "UNSAVE", postId, userId: me });
-  } else {
-    POST_MAP[postId] = {
-      ...post,
-      savedByMe: true,
-      saveCount: (post.saveCount ?? 0) + 1,
-    };
-    emitEvent({ type: "SAVE", postId, userId: me });
-  }
+export function toggleSaveForUser(userId: string, postId: string): { saved: boolean } {
+  const post = POST_MAP[postId];
+  if (!post) return { saved: false };
+  if (!savedPostIdsByUser[userId]) savedPostIdsByUser[userId] = [];
+  const alreadySaved = savedPostIdsByUser[userId].includes(postId);
+  const nextSaved = !alreadySaved;
+  savedPostIdsByUser[userId] = alreadySaved
+    ? savedPostIdsByUser[userId].filter((id) => id !== postId)
+    : [...savedPostIdsByUser[userId], postId];
 
+  POST_MAP[postId] = {
+    ...post,
+    savedByMe: nextSaved,
+    saveCount: nextSaved ? (post.saveCount ?? 0) + 1 : Math.max(0, (post.saveCount ?? 1) - 1),
+  };
+  emitEvent({ type: nextSaved ? "SAVE" : "UNSAVE", postId, userId });
   invalidateCache();
   notifyFeedSubscribers();
+  return { saved: nextSaved };
 }
 
 export function toggleComments(postId: string) {
@@ -756,14 +783,24 @@ export function toggleLikeVisibility(postId: string) {
 }
 
 export function isPostSaved(postId: string): boolean {
-  return !!POST_MAP[postId]?.savedByMe;
+  return isSaved(getCurrentSocialUserId(), postId);
+}
+
+export function isLiked(userId: string, postId: string): boolean {
+  return (likedPostIdsByUser[userId] || []).includes(postId);
+}
+
+export function isSaved(userId: string, postId: string): boolean {
+  return (savedPostIdsByUser[userId] || []).includes(postId);
 }
 
 export function getSavedPosts(): SocialPost[] {
+  const me = getCurrentSocialUserId();
+  const savedSet = new Set(savedPostIdsByUser[me] || []);
   return filterBlockedAndMutedAuthors(
     filterPublished(
       POST_ORDER.map((id) => POST_MAP[id]).filter(
-        (p) => !!p.savedByMe && !p.archived
+        (p) => savedSet.has(p.id) && !p.archived
       )
     )
   );

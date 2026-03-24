@@ -18,13 +18,14 @@ import SocialScreenLayout from "../components/SocialScreenLayout";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 
 import {
+  getAllPosts,
   getSavedPosts,
-  isPostSaved,
+  isSaved,
   subscribeFeed,
-  toggleLike,
-  toggleSavedPost,
+  toggleLikeForUser,
+  toggleSaveForUser,
 } from "../services/socialFeedStateService";
-import { subscribeFollow } from "../services/socialFollowService";
+import { getCurrentSocialUserId, subscribeFollow } from "../services/socialFollowService";
 
 import type { SocialPost } from "../types/social.types";
 
@@ -37,6 +38,7 @@ type Nav = NativeStackNavigationProp<SocialStackParamList>;
 export default function SocialSavedPostsScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<Nav>();
+  const currentUserId = getCurrentSocialUserId();
 
   const [posts, setPosts] = useState<SocialPost[]>((() => getSavedPosts()) as any);
 
@@ -45,7 +47,10 @@ export default function SocialSavedPostsScreen() {
   /* ------------------------------------------------------------------ */
 
   useEffect(() => {
-    const sync = () => setPosts(getSavedPosts());
+    const sync = () =>
+      setPosts(
+        getAllPosts().filter((p) => isSaved(currentUserId, p.id))
+      );
     sync();
     const u1 = subscribeFeed(sync);
     const u2 = subscribeFollow(sync);
@@ -53,14 +58,14 @@ export default function SocialSavedPostsScreen() {
       u1();
       u2();
     };
-  }, []);
+  }, [currentUserId]);
 
   /* ------------------------------------------------------------------ */
   /* ACTIONS                                                            */
   /* ------------------------------------------------------------------ */
 
   function removeSaved(postId: string) {
-    toggleSavedPost(postId);
+    toggleSaveForUser(currentUserId, postId);
   }
 
   const isEmpty = useMemo(() => posts.length === 0, [posts]);
@@ -84,7 +89,7 @@ export default function SocialSavedPostsScreen() {
           renderItem={({ item }) => (
             <SocialPostCard
               post={item}
-              saved={isPostSaved(item.id)}
+              saved={isSaved(currentUserId, item.id)}
               onPressPost={() =>
                 navigation.navigate("SocialPostDetail", {
                   postId: item.id,
@@ -96,7 +101,7 @@ export default function SocialSavedPostsScreen() {
                   initialIndex: index,
                 })
               }
-              onToggleLike={() => toggleLike(item.id)}
+              onToggleLike={() => toggleLikeForUser(currentUserId, item.id)}
               onPressComments={() =>
                 navigation.navigate("SocialPostDetail", {
                   postId: item.id,

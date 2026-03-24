@@ -404,7 +404,7 @@ export default function SocialStoryEditorScreen() {
                   ref={inputRef}
                   value={draftText}
                   onChangeText={syncDraftToOverlay}
-                  placeholder="Yazı…"
+                  placeholder={t("social.story.textPlaceholder")}
                   placeholderTextColor={colors.muted}
                   multiline
                   style={{
@@ -422,7 +422,7 @@ export default function SocialStoryEditorScreen() {
                   }}
                   style={{ padding: 8 }}
                 >
-                  <Text style={{ color: colors.primary, fontWeight: "700" }}>Bitti</Text>
+                  <Text style={{ color: colors.primary, fontWeight: "700" }}>{t("social.done")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
