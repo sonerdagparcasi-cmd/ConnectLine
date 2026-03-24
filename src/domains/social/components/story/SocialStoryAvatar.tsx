@@ -43,9 +43,11 @@ export default function SocialStoryAvatar({
         </View>
       </SocialStoryRing>
 
-      <Text style={[styles.name, { color: T.textColor }]} numberOfLines={1}>
-        {isMe ? labelForMe ?? "Me" : name ?? "User"}
-      </Text>
+      <View style={styles.namePill}>
+        <Text style={styles.name} numberOfLines={1}>
+          {isMe ? labelForMe ?? "Me" : name ?? "User"}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -98,11 +100,19 @@ const styles = StyleSheet.create({
   },
 
   name: {
-    marginTop: 4,
     fontSize: 12,
-    fontWeight: "700",
+    color: "#fff",
+    fontWeight: "600",
     textAlign: "center",
     lineHeight: 15,
+  },
+  namePill: {
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 10,
+    alignSelf: "center",
   },
 });
 

@@ -40,6 +40,27 @@ export default function SocialNotificationsScreen() {
   const openRow = useCallback(
     (n: SocialNotification) => {
       socialNotificationService.markAsRead(n.id);
+
+      if (n.type === "story_reply" || n.type === "story_emoji") {
+        if (!n.storyId) return;
+        navigation.navigate("SocialStoryViewerScreen", { storyId: n.storyId });
+        return;
+      }
+
+      if (n.type === "message") {
+        const uid = n.actorUserId ?? n.targetUserId;
+        if (!uid) return;
+        navigation.navigate("SocialChatScreen", { userId: uid });
+        return;
+      }
+
+      if (n.type === "comment" || n.type === "like") {
+        const pid = n.targetPostId ?? n.postId;
+        if (!pid) return;
+        navigation.navigate("SocialPostDetailScreen", { postId: pid });
+        return;
+      }
+
       if (
         applySocialNotificationNavigation(n, (screen, params) => {
           (navigation as { navigate: (s: string, p?: object) => void }).navigate(

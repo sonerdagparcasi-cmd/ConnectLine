@@ -12,11 +12,11 @@ import {
 } from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
+import { useSocialProfile } from "../hooks/useSocialProfile";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
 import { getStoryMeta } from "../story/services/socialStoryStateService";
-import type { SocialStory } from "../types/social.types";
-import { useSocialProfile } from "../hooks/useSocialProfile";
 import StoryAvatar from "../story/ui/StoryAvatar";
+import type { SocialStory } from "../types/social.types";
 
 /* ------------------------------------------------------------------ */
 
@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
   railWrap: {},
 
   gradientWrap: {
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingTop: 3,
+    paddingBottom: 6,
   },
 
   wrap: {
@@ -299,6 +299,6 @@ const styles = StyleSheet.create({
   },
 
   itemGap: {
-    marginRight: 12,
+    marginRight: 6,
   },
 });

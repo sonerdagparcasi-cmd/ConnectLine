@@ -9,6 +9,7 @@
 
 import type { SocialStory } from "../types/social.types";
 import { emitSocialEvent } from "./socialFeedStateService";
+import { socialNotificationService } from "./socialNotificationService";
 /* ------------------------------------------------------------------ */
 /* TYPES                                                              */
 /* ------------------------------------------------------------------ */
@@ -96,6 +97,15 @@ export function addStoryReply(
     targetUserId,
     storyId,
   });
+  if (targetUserId && targetUserId !== senderUserId) {
+    socialNotificationService.push({
+      type: "story_reply",
+      userId: senderUserId,
+      targetId: targetUserId,
+      storyId,
+      message: "story_reply",
+    });
+  }
   return reply;
 }
 
@@ -136,6 +146,15 @@ export function addStoryReaction(
     storyId,
     reaction,
   });
+  if (targetUserId && targetUserId !== senderUserId) {
+    socialNotificationService.push({
+      type: "story_emoji",
+      userId: senderUserId,
+      targetId: targetUserId,
+      storyId,
+      message: "story_emoji",
+    });
+  }
   return reply;
 }
 

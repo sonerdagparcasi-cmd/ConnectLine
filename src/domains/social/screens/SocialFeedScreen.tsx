@@ -11,12 +11,12 @@ import {
   View,
 } from "react-native";
 
-import { useAppTheme } from "../../../shared/theme/appTheme";
 import { t } from "../../../shared/i18n/t";
+import { useAppTheme } from "../../../shared/theme/appTheme";
+import SocialFeedHeader from "../components/SocialFeedHeader";
 import SocialNotificationBell from "../components/SocialNotificationBell";
 import SocialPostCard from "../components/SocialPostCard";
 import SocialPostSkeleton from "../components/SocialPostSkeleton";
-import SocialFeedHeader from "../components/SocialFeedHeader";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import {
   loadInitial,
@@ -28,8 +28,7 @@ import {
   getStories,
   subscribeStories,
 } from "../services/socialStoryStateService";
-import type { SocialPost } from "../types/social.types";
-import type { SocialStory } from "../types/social.types";
+import type { SocialPost, SocialStory } from "../types/social.types";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
 

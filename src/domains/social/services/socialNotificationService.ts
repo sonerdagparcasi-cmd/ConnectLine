@@ -52,6 +52,7 @@ export const socialNotificationService = {
     type: string;
     userId?: string;
     targetId?: string;
+    storyId?: string;
     postId?: string;
     message?: string;
   }) {
@@ -63,6 +64,7 @@ export const socialNotificationService = {
       actorUsername: notification.userId ?? "u1",
       actorAvatarUri: null,
       targetUserId: notification.targetId ?? "u1",
+      storyId: notification.storyId,
       postId: notification.postId,
       targetPostId: notification.postId,
       text: notification.message ?? "",
@@ -197,7 +199,12 @@ function safeNotify(input: Omit<SocialNotification, "id" | "createdAt" | "read">
 
 function buildNotificationFromEvent(event: SocialEvent): SocialNotification | null {
   // Direct push path is used for LIKE / COMMENT / FOLLOW to avoid duplicates.
-  if (event.type === "LIKE" || event.type === "COMMENT" || event.type === "FOLLOW") {
+  if (
+    event.type === "LIKE" ||
+    event.type === "COMMENT" ||
+    event.type === "FOLLOW" ||
+    event.type === "STORY_REPLY"
+  ) {
     return null;
   }
   if (event.type === "LIKE") {

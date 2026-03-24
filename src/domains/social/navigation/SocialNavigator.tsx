@@ -78,9 +78,14 @@ export type SocialStackParamList = {
 
   SocialInbox: undefined;
   SocialChat: { userId: string };
+  SocialChatScreen: { userId: string };
 
   SocialCreatePost: { editingPostId?: string } | undefined;
   SocialPostDetail: {
+    postId: string;
+    origin?: { x: number; y: number; width: number; height: number };
+  };
+  SocialPostDetailScreen: {
     postId: string;
     origin?: { x: number; y: number; width: number; height: number };
   };
@@ -96,6 +101,13 @@ export type SocialStackParamList = {
   };
 
   SocialStoryViewer:
+    | {
+        initialUserId?: string;
+        initialStoryIndex?: number;
+        storyId?: string;
+      }
+    | undefined;
+  SocialStoryViewerScreen:
     | {
         initialUserId?: string;
         initialStoryIndex?: number;
@@ -177,6 +189,11 @@ export default function SocialNavigator({ entry = "feed" }: Props) {
         component={SocialChatScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="SocialChatScreen"
+        component={SocialChatScreen}
+        options={{ headerShown: false }}
+      />
 
       {/* PROFILE */}
       <Stack.Screen
@@ -202,6 +219,7 @@ export default function SocialNavigator({ entry = "feed" }: Props) {
       <Stack.Screen name="SocialCreatePost" component={SocialCreatePostScreen} />
 
       <Stack.Screen name="SocialPostDetail" component={SocialPostDetailScreen} />
+      <Stack.Screen name="SocialPostDetailScreen" component={SocialPostDetailScreen} />
 
       <Stack.Screen name="SocialEditPost" component={SocialEditPostScreen} />
 
@@ -211,6 +229,7 @@ export default function SocialNavigator({ entry = "feed" }: Props) {
 
       {/* STORY */}
       <Stack.Screen name="SocialStoryViewer" component={SocialStoryViewerScreen} />
+      <Stack.Screen name="SocialStoryViewerScreen" component={SocialStoryViewerScreen} />
 
       <Stack.Screen name="SocialCreateStory" component={SocialCreateStoryScreen} />
       <Stack.Screen
