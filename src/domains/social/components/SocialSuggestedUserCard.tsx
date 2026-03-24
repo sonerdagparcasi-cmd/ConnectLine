@@ -6,6 +6,10 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import { t } from "../../../shared/i18n/t";
+import {
+  getCurrentSocialUserId,
+  socialFollowService,
+} from "../services/socialFollowService";
 
 export type SuggestedUser = {
   userId: string;
@@ -16,8 +20,8 @@ export type SuggestedUser = {
 
 type Props = {
   user: SuggestedUser;
-  isFollowing: boolean;
-  onFollow: () => void;
+  isFollowing?: boolean;
+  onFollow?: () => void;
   onPress?: () => void;
 };
 
@@ -28,6 +32,20 @@ export default function SocialSuggestedUserCard({
   onPress,
 }: Props) {
   const T = useAppTheme();
+  const currentUserId = getCurrentSocialUserId();
+  const following =
+    isFollowing ?? socialFollowService.isFollowing(currentUserId, user.userId);
+  const handleFollow = () => {
+    if (onFollow) {
+      onFollow();
+      return;
+    }
+    if (socialFollowService.isFollowing(currentUserId, user.userId)) {
+      socialFollowService.unfollow(currentUserId, user.userId);
+      return;
+    }
+    socialFollowService.follow(currentUserId, user.userId);
+  };
 
   return (
     <TouchableOpacity
@@ -59,12 +77,12 @@ export default function SocialSuggestedUserCard({
       <TouchableOpacity
         onPress={(e) => {
           e?.stopPropagation?.();
-          onFollow();
+          handleFollow();
         }}
         style={[styles.followBtn, { backgroundColor: T.accent }]}
       >
         <Text style={[styles.followBtnText, { color: T.cardBg }]}>
-          {isFollowing ? t("social.following") : t("social.follow")}
+          {following ? t("social.following") : t("social.follow")}
         </Text>
       </TouchableOpacity>
     </TouchableOpacity>

@@ -8,6 +8,7 @@
 
 import type { SocialPost } from "../types/social.types";
 import { MOCK_POSTS } from "./socialMockData";
+import { socialNotificationService } from "./socialNotificationService";
 
 /* ------------------------------------------------------------------ */
 /* MOCK FOLLOWING                                                     */
@@ -26,6 +27,7 @@ const FOLLOWING_IDS = ["u2", "u3", "u4"];
 
 const INITIAL_FEED_LIMIT = 20;
 const INITIAL_EXPLORE_LIMIT = 30;
+const PAGE_SIZE = 10;
 
 /* ------------------------------------------------------------------ */
 /* HELPERS                                                            */
@@ -153,17 +155,44 @@ function getRecommendedPosts(): SocialPost[] {
   return sortByDate(posts);
 }
 
+function generateMockPosts(total: number): SocialPost[] {
+  const seed = sortByDate([...getFollowingPosts(), ...getRecommendedPosts()]);
+  if (seed.length === 0) return [];
+
+  const generated: SocialPost[] = [];
+  for (let i = 0; i < total; i += 1) {
+    const base = seed[i % seed.length];
+    const createdAt = new Date(
+      new Date(base.createdAt).getTime() - i * 60 * 1000
+    ).toISOString();
+    generated.push({
+      ...base,
+      id: `${base.id}_page_${i}`,
+      createdAt,
+    });
+  }
+  return generated;
+}
+
+let allPosts = generateMockPosts(100);
+
+export const socialFeedService = {
+  getFeed(page = 0) {
+    const start = page * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return {
+      data: allPosts.slice(start, end),
+      hasMore: end < allPosts.length,
+    };
+  },
+};
+
 /* ------------------------------------------------------------------ */
 /* MERGED FEED                                                        */
 /* ------------------------------------------------------------------ */
 
 export function getFeedPosts(): SocialPost[] {
-  const following = getFollowingPosts();
-  const recommended = getRecommendedPosts();
-
-  const merged = [...following, ...recommended];
-
-  return merged.slice(0, INITIAL_FEED_LIMIT);
+  return allPosts.slice(0, INITIAL_FEED_LIMIT);
 }
 
 /* ------------------------------------------------------------------ */
@@ -202,4 +231,18 @@ export function getRecommendedForUser(): SocialPost[] {
   );
 
   return sortByTrend(posts).slice(0, 20);
+}
+
+export function pushLikeNotification(input: {
+  postId: string;
+  userId: string;
+  targetId: string;
+}) {
+  socialNotificationService.push({
+    type: "like",
+    postId: input.postId,
+    userId: input.userId,
+    targetId: input.targetId,
+    message: "liked_your_post",
+  });
 }

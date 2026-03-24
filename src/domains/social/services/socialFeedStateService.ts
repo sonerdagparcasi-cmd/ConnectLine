@@ -21,7 +21,11 @@ function filterBlockedAndMutedAuthors(posts: SocialPost[]): SocialPost[] {
   return posts.filter((p) => !isUserBlocked(p.userId) && !isMuted(p.userId));
 }
 import { socialEventService } from "./socialEventService";
-import { getFeedPosts as getBaseFeedPosts } from "./socialFeedService";
+import {
+  getFeedPosts as getBaseFeedPosts,
+  pushLikeNotification,
+  socialFeedService,
+} from "./socialFeedService";
 
 export type SocialEvent =
   | {
@@ -88,6 +92,9 @@ let PAGE = 1;
 let PAGE_SIZE = 5;
 let HAS_MORE = true;
 let LOADING = false;
+let currentPage = 0;
+let feed: SocialPost[] = [];
+let hasMore = true;
 
 /* ------------------------------------------------------------------ */
 /* COMMENTS (per post)                                                 */
@@ -210,6 +217,13 @@ function mergeSettings(
 /* ------------------------------------------------------------------ */
 
 export function getFeedPosts(): SocialPost[] {
+  if (feed.length > 0) {
+    const visible = filterBlockedAndMutedAuthors(feed).filter((p) => !p.archived);
+    return [...visible].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
   const posts = filterPublished(getAllPosts());
   const filtered = posts.filter(
     (p) => !isUserBlocked(p.userId) && !isMuted(p.userId)
@@ -357,11 +371,31 @@ export function getExplorePosts(): SocialPost[] {
 
 export function getFeedPagination() {
   return {
-    page: PAGE,
+    page: currentPage,
     pageSize: PAGE_SIZE,
-    hasMore: HAS_MORE,
+    hasMore,
     loading: LOADING,
   };
+}
+
+export function loadInitial() {
+  const res = socialFeedService.getFeed(0);
+  currentPage = 0;
+  feed = filterBlockedAndMutedAuthors(res.data);
+  hasMore = res.hasMore;
+  emit();
+  return { feed: [...feed], hasMore };
+}
+
+export function loadMore() {
+  if (!hasMore) return { feed: [...feed], hasMore };
+  const nextPage = currentPage + 1;
+  const res = socialFeedService.getFeed(nextPage);
+  currentPage = nextPage;
+  feed = [...feed, ...filterBlockedAndMutedAuthors(res.data)];
+  hasMore = res.hasMore;
+  emit();
+  return { feed: [...feed], hasMore };
 }
 
 /* ------------------------------------------------------------------ */
@@ -554,6 +588,14 @@ export function toggleLike(postId: string): void {
     targetUserId: post.userId,
     actorUsername: getSocialDisplayName(me),
   });
+
+  if (next.likedByMe && post.userId && post.userId !== me) {
+    pushLikeNotification({
+      postId,
+      userId: me,
+      targetId: post.userId,
+    });
+  }
 }
 
 /** `toggleLike` ile aynı — API uyumluluğu (interaction core). Beğeni bildirimi `toggleLike` içinde `notifyPostLiked`. */
@@ -642,6 +684,9 @@ export function resetFeedPosts() {
   PAGE = 1;
   HAS_MORE = true;
   LOADING = false;
+  currentPage = 0;
+  feed = [];
+  hasMore = true;
 
   emit();
 }

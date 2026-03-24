@@ -16,7 +16,11 @@ import SocialNotificationBell from "../components/SocialNotificationBell";
 import SocialPostCard from "../components/SocialPostCard";
 import SocialPostSkeleton from "../components/SocialPostSkeleton";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
-import { getFeedPosts, subscribeFeed } from "../services/socialFeedStateService";
+import {
+  loadInitial,
+  loadMore,
+  subscribeFeed,
+} from "../services/socialFeedStateService";
 import { subscribeFollow } from "../services/socialFollowService";
 import type { SocialPost } from "../types/social.types";
 
@@ -26,57 +30,48 @@ export default function SocialFeedScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<Nav>();
 
-  const [posts, setPosts] = useState<SocialPost[]>(() => getFeedPosts());
+  const [feed, setFeed] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [page, setPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [visibleIndex, setVisibleIndex] = useState(0);
 
-  const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadMoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   useEffect(() => {
-    setPosts(getFeedPosts());
-    const unsubFeed = subscribeFeed(() => setPosts(getFeedPosts()));
-    const unsubFollow = subscribeFollow(() => setPosts(getFeedPosts()));
+    const initial = loadInitial();
+    setFeed(initial.feed);
+    setHasMore(initial.hasMore);
+    setLoading(false);
+
+    const unsubFeed = subscribeFeed(() => {
+      setFeed((prev) => [...prev]);
+    });
+    const unsubFollow = subscribeFollow(() => {
+      setFeed((prev) => [...prev]);
+    });
     return () => {
       unsubFeed();
       unsubFollow();
     };
   }, []);
-
-  useEffect(() => {
-    loadingTimerRef.current = setTimeout(() => {
-      setLoading(false);
-    }, 1000);
-
-    return () => {
-      if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-      if (loadMoreTimerRef.current) clearTimeout(loadMoreTimerRef.current);
-    };
-  }, []);
-
-  const visiblePosts = useMemo(() => posts, [posts]);
+  const visiblePosts = useMemo(() => feed, [feed]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    refreshTimerRef.current = setTimeout(() => {
-      setPosts(getFeedPosts());
-      setRefreshing(false);
-    }, 1000);
+    const res = loadInitial();
+    setFeed(res.feed);
+    setHasMore(res.hasMore);
+    setRefreshing(false);
   }, []);
 
-  const loadMore = useCallback(() => {
-    if (loadingMore) return;
+  const handleLoadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
     setLoadingMore(true);
-    loadMoreTimerRef.current = setTimeout(() => {
-      setPage((p) => p + 1);
-      setLoadingMore(false);
-    }, 1000);
-  }, [loadingMore]);
+    const res = loadMore();
+    setFeed(res.feed);
+    setHasMore(res.hasMore);
+    setLoadingMore(false);
+  }, [loadingMore, hasMore]);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 70,
@@ -126,17 +121,13 @@ export default function SocialFeedScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        onEndReached={loadMore}
+        onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={
           loadingMore ? (
-            <View style={styles.footerLoading}>
-              <Text style={{ color: T.mutedText, textAlign: "center" }}>Yukleniyor...</Text>
-            </View>
+            <SocialPostSkeleton count={3} compact />
           ) : (
-            <View style={styles.footerSpace}>
-              <Text style={{ color: "transparent", textAlign: "center" }}>{page}</Text>
-            </View>
+            <View style={styles.footerSpace} />
           )
         }
         initialNumToRender={3}
@@ -171,9 +162,6 @@ const styles = StyleSheet.create({
   emptyCenter: {
     justifyContent: "center",
     alignItems: "center",
-  },
-  footerLoading: {
-    padding: 16,
   },
   footerSpace: {
     height: 1,

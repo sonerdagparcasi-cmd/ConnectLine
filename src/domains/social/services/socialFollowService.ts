@@ -4,6 +4,7 @@
 import { socialProfileStore } from "../state/socialProfileStore";
 import { MOCK_POSTS } from "./socialMockData";
 import { emitSocialEvent, subscribeEvents } from "./socialFeedStateService";
+import { socialNotificationService } from "./socialNotificationService";
 
 /* ------------------------------------------------------------------ */
 /* CURRENT USER                                                       */
@@ -20,8 +21,9 @@ export function getCurrentSocialUserId(): string {
 /* FOLLOW GRAPH                                                       */
 /* ------------------------------------------------------------------ */
 
-let FOLLOWING: Record<string, boolean> = {
-  u2: true,
+let followersMap: Record<string, string[]> = {};
+let followingMap: Record<string, string[]> = {
+  [CURRENT_USER_ID]: ["u2"],
 };
 
 const BLOCKED_USER_IDS = new Set<string>();
@@ -30,7 +32,9 @@ let MUTED: Set<string> = new Set();
 let listeners: Array<() => void> = [];
 
 function updateFollowStats() {
-  socialProfileStore.setFollowingCount(getFollowingCount());
+  socialProfileStore.setFollowingCount(getFollowingCount(CURRENT_USER_ID));
+  socialProfileStore.setFollowersMap(followersMap);
+  socialProfileStore.setFollowingMap(followingMap);
 }
 
 let eventBridgeInitialized = false;
@@ -89,46 +93,77 @@ export function getSocialDisplayName(userId: string): string {
 /* FOLLOW ACTIONS                                                     */
 /* ------------------------------------------------------------------ */
 
-export function followUser(userId: string) {
-  ensureEventBridgeInitialized();
-  if (userId === CURRENT_USER_ID) return;
+export const socialFollowService = {
+  follow(userId: string, targetId: string) {
+    ensureEventBridgeInitialized();
+    if (!userId || !targetId || userId === targetId) return;
 
-  const wasFollowing = !!FOLLOWING[userId];
+    if (!followingMap[userId]) followingMap[userId] = [];
+    if (!followersMap[targetId]) followersMap[targetId] = [];
 
-  FOLLOWING = {
-    ...FOLLOWING,
-    [userId]: true,
-  };
+    const alreadyFollowing = followingMap[userId].includes(targetId);
+    if (alreadyFollowing) return;
 
-  updateFollowStats();
-  emit();
+    followingMap[userId] = [...followingMap[userId], targetId];
+    followersMap[targetId] = [...followersMap[targetId], userId];
 
-  if (!wasFollowing) {
+    updateFollowStats();
+    emit();
+
     emitSocialEvent({
       type: "FOLLOW",
-      targetUserId: userId,
-      userId: CURRENT_USER_ID,
-      actorUsername: getSocialDisplayName(CURRENT_USER_ID),
+      targetUserId: targetId,
+      userId,
+      actorUsername: getSocialDisplayName(userId),
     });
-  }
+
+    socialNotificationService.push({
+      type: "follow",
+      userId,
+      targetId,
+      message: "started_following_you",
+    });
+  },
+
+  unfollow(userId: string, targetId: string) {
+    ensureEventBridgeInitialized();
+    if (!userId || !targetId || userId === targetId) return;
+
+    followingMap[userId] = (followingMap[userId] || []).filter((id) => id !== targetId);
+    followersMap[targetId] = (followersMap[targetId] || []).filter((id) => id !== userId);
+
+    updateFollowStats();
+    emit();
+
+    emitSocialEvent({
+      type: "UNFOLLOW",
+      targetUserId: targetId,
+      userId,
+      actorUsername: getSocialDisplayName(userId),
+    });
+  },
+
+  isFollowing(userId: string, targetId: string) {
+    return (followingMap[userId] || []).includes(targetId);
+  },
+
+  getFollowers(userId: string) {
+    return followersMap[userId] || [];
+  },
+
+  getFollowing(userId: string) {
+    return followingMap[userId] || [];
+  },
+};
+
+export function followUser(userId: string) {
+  ensureEventBridgeInitialized();
+  socialFollowService.follow(CURRENT_USER_ID, userId);
 }
 
 export function unfollowUser(userId: string) {
   ensureEventBridgeInitialized();
-  const next = { ...FOLLOWING };
-
-  delete next[userId];
-
-  FOLLOWING = next;
-
-  updateFollowStats();
-  emit();
-  emitSocialEvent({
-    type: "UNFOLLOW",
-    targetUserId: userId,
-    userId: CURRENT_USER_ID,
-    actorUsername: getSocialDisplayName(CURRENT_USER_ID),
-  });
+  socialFollowService.unfollow(CURRENT_USER_ID, userId);
 }
 
 export function toggleFollow(userId: string) {
@@ -194,17 +229,22 @@ export function rejectFollowRequest(id: string) {
 /* ------------------------------------------------------------------ */
 
 export function isFollowing(userId: string): boolean {
-  return !!FOLLOWING[userId];
+  return socialFollowService.isFollowing(CURRENT_USER_ID, userId);
 }
 
 export function getFollowingIds(): string[] {
-  return Object.keys(FOLLOWING);
+  return socialFollowService.getFollowing(CURRENT_USER_ID);
+}
+
+export function getFollowing(userId: string): string[] {
+  return socialFollowService.getFollowing(userId);
 }
 
 export function getFollowingUsers() {
   const users = getAllUsers();
 
-  return users.filter((u) => FOLLOWING[u.userId]);
+  const followingIds = new Set(socialFollowService.getFollowing(CURRENT_USER_ID));
+  return users.filter((u) => followingIds.has(u.userId));
 }
 
 /* ------------------------------------------------------------------ */
@@ -214,19 +254,9 @@ export function getFollowingUsers() {
 export function getFollowers(userId?: string) {
   const users = getAllUsers();
 
-  if (!userId) {
-    userId = CURRENT_USER_ID;
-  }
-
-  return users.filter((u) => {
-    if (u.userId === CURRENT_USER_ID) return false;
-
-    if (FOLLOWING[u.userId] && u.userId !== userId) {
-      return true;
-    }
-
-    return false;
-  });
+  const targetId = userId ?? CURRENT_USER_ID;
+  const followerIds = new Set(socialFollowService.getFollowers(targetId));
+  return users.filter((u) => followerIds.has(u.userId));
 }
 
 /* ------------------------------------------------------------------ */
@@ -239,7 +269,7 @@ export function getMutualConnectionUsers(userId: string) {
 
   const otherFollowing: string[] = [];
 
-  if (FOLLOWING[userId]) {
+  if (socialFollowService.isFollowing(CURRENT_USER_ID, userId)) {
     otherFollowing.push(userId);
   }
 
@@ -265,7 +295,7 @@ export function getSuggestedUsers(limit = 5) {
 
   return users
     .filter((u) => u.userId !== CURRENT_USER_ID)
-    .filter((u) => !FOLLOWING[u.userId])
+    .filter((u) => !socialFollowService.isFollowing(CURRENT_USER_ID, u.userId))
     .filter((u) => !BLOCKED_USER_IDS.has(u.userId))
     .slice(0, limit);
 }
@@ -277,9 +307,7 @@ export function getSuggestedUsers(limit = 5) {
 export function blockUser(userId: string): void {
   if (userId === CURRENT_USER_ID) return;
   BLOCKED_USER_IDS.add(userId);
-  const next = { ...FOLLOWING };
-  delete next[userId];
-  FOLLOWING = next;
+  socialFollowService.unfollow(CURRENT_USER_ID, userId);
   updateFollowStats();
   emit();
 }
@@ -329,8 +357,8 @@ export function isMuted(userId: string): boolean {
 /* FOLLOW COUNTS                                                      */
 /* ------------------------------------------------------------------ */
 
-export function getFollowingCount() {
-  return Object.keys(FOLLOWING).length;
+export function getFollowingCount(userId: string = CURRENT_USER_ID) {
+  return socialFollowService.getFollowing(userId).length;
 }
 
 export function getFollowerCount() {

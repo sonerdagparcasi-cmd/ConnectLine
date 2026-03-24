@@ -24,6 +24,8 @@ export type SocialProfile = {
   followingCount: number;
 
   isFollowing: boolean;
+  followersMap: Record<string, string[]>;
+  followingMap: Record<string, string[]>;
 
   /* ------------------------------------------------ */
   /* PRIVACY / SECURITY (FAZ 5)                       */
@@ -53,6 +55,8 @@ let profile: SocialProfile = {
   followingCount: 0,
 
   isFollowing: false,
+  followersMap: {},
+  followingMap: {},
 
   privateAccount: false,
   allowMessageRequests: true,
@@ -180,6 +184,22 @@ export const socialProfileStore = {
     profile = {
       ...profile,
       followingCount: count,
+    };
+    notify();
+  },
+
+  setFollowersMap(next: Record<string, string[]>) {
+    profile = {
+      ...profile,
+      followersMap: next,
+    };
+    notify();
+  },
+
+  setFollowingMap(next: Record<string, string[]>) {
+    profile = {
+      ...profile,
+      followingMap: next,
     };
     notify();
   },

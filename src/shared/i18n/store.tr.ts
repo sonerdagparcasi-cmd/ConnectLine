@@ -4,6 +4,9 @@ export const storeTR = {
   writeReview: "Yorum Yaz",
   reports: "Raporlar",
   orders: "Siparişlerim",
+  started_following_you: "seni takip etmeye başladı",
+  liked_your_post: "gönderini beğendi",
+  commented_on_post: "gönderine yorum yaptı",
 
   chat: {
     send: "Gönder",

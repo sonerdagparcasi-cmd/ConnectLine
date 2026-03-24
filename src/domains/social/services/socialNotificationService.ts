@@ -43,6 +43,43 @@ export function getNotifications(): SocialNotification[] {
   );
 }
 
+export const socialNotificationService = {
+  getAll() {
+    return getNotifications();
+  },
+
+  push(notification: {
+    type: string;
+    userId?: string;
+    targetId?: string;
+    postId?: string;
+    message?: string;
+  }) {
+    const now = new Date().toISOString();
+    addNotification({
+      id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type: (notification.type as SocialNotification["type"]) ?? "like",
+      actorUserId: notification.userId ?? "u1",
+      actorUsername: notification.userId ?? "u1",
+      actorAvatarUri: null,
+      targetUserId: notification.targetId ?? "u1",
+      postId: notification.postId,
+      targetPostId: notification.postId,
+      text: notification.message ?? "",
+      createdAt: now,
+      read: false,
+    });
+  },
+
+  markAsRead(id: string) {
+    markNotificationRead(id);
+  },
+
+  markAllAsRead() {
+    markAllNotificationsRead();
+  },
+};
+
 /* ------------------------------------------------------------------ */
 /* GET UNREAD COUNT                                                   */
 /* ------------------------------------------------------------------ */
@@ -159,6 +196,10 @@ function safeNotify(input: Omit<SocialNotification, "id" | "createdAt" | "read">
 }
 
 function buildNotificationFromEvent(event: SocialEvent): SocialNotification | null {
+  // Direct push path is used for LIKE / COMMENT / FOLLOW to avoid duplicates.
+  if (event.type === "LIKE" || event.type === "COMMENT" || event.type === "FOLLOW") {
+    return null;
+  }
   if (event.type === "LIKE") {
     if (!event.targetUserId || !event.postId) return null;
     return {

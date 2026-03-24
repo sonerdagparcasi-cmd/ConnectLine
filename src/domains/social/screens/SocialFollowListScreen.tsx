@@ -20,11 +20,12 @@ import SocialScreenLayout from "../components/SocialScreenLayout";
 import { useSocialProfile } from "../hooks/useSocialProfile";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import {
+  getCurrentSocialUserId,
   getFollowers,
+  getFollowing,
   getMutualConnectionUsers,
-  isFollowing,
+  socialFollowService,
   subscribeFollow,
-  toggleFollow,
 } from "../services/socialFollowService";
 import { getUserDisplay } from "../story/services/socialStoryStateService";
 
@@ -33,11 +34,24 @@ type FollowListRoute = RouteProp<SocialStackParamList, "SocialFollowList">;
 
 type RowUser = { userId: string; username: string };
 
-function loadUsers(userId: string, type: "followers" | "mutual"): RowUser[] {
+function toRowUsers(userIds: string[]): RowUser[] {
+  return userIds.map((id) => {
+    const display = getUserDisplay(id);
+    return {
+      userId: id,
+      username: display.username || id,
+    };
+  });
+}
+
+function loadUsers(userId: string, type: "followers" | "following" | "mutual"): RowUser[] {
   if (type === "mutual") {
     return getMutualConnectionUsers(userId);
   }
-  return getFollowers(userId);
+  if (type === "following") {
+    return toRowUsers(getFollowing(userId));
+  }
+  return toRowUsers(getFollowers(userId).map((u) => u.userId));
 }
 
 export default function SocialFollowListScreen() {
@@ -49,21 +63,29 @@ export default function SocialFollowListScreen() {
   const userId = route.params?.userId ?? meProfile.userId;
   const type = route.params?.type ?? "followers";
 
-  const [users, setUsers] = useState<RowUser[]>(() => loadUsers(userId, type));
+  const [users, setUsers] = useState<RowUser[]>(() =>
+    loadUsers(userId, type as "followers" | "following" | "mutual")
+  );
+  const currentUserId = getCurrentSocialUserId();
 
   useEffect(() => {
-    setUsers(loadUsers(userId, type));
+    setUsers(loadUsers(userId, type as "followers" | "following" | "mutual"));
   }, [userId, type]);
 
   useEffect(() => {
     const unsub = subscribeFollow(() => {
-      setUsers(loadUsers(userId, type));
+      setUsers(loadUsers(userId, type as "followers" | "following" | "mutual"));
     });
     return unsub;
   }, [userId, type]);
 
   const title = useMemo(
-    () => (type === "mutual" ? t("social.mutualConnections") : t("social.followers")),
+    () =>
+      type === "mutual"
+        ? t("social.mutualConnections")
+        : type === "following"
+          ? t("social.following")
+          : t("social.followers"),
     [type]
   );
 
@@ -78,7 +100,7 @@ export default function SocialFollowListScreen() {
     ({ item }: { item: RowUser }) => {
       const display = getUserDisplay(item.userId);
       const username = display.username || item.username;
-      const following = isFollowing(item.userId);
+      const following = socialFollowService.isFollowing(currentUserId, item.userId);
       const isSelf = item.userId === meProfile.userId;
 
       return (
@@ -104,7 +126,13 @@ export default function SocialFollowListScreen() {
             <TouchableOpacity
               activeOpacity={0.65}
               style={[styles.followBtn, { borderColor: T.border }]}
-              onPress={() => toggleFollow(item.userId)}
+              onPress={() => {
+                if (following) {
+                  socialFollowService.unfollow(currentUserId, item.userId);
+                } else {
+                  socialFollowService.follow(currentUserId, item.userId);
+                }
+              }}
             >
               <Text style={[styles.followBtnText, { color: T.accent }]}>
                 {following ? t("social.following") : t("social.follow")}
@@ -116,7 +144,7 @@ export default function SocialFollowListScreen() {
         </View>
       );
     },
-    [T, meProfile.userId, openProfile]
+    [T, meProfile.userId, openProfile, currentUserId]
   );
 
   const keyExtractor = useCallback((item: RowUser) => item.userId, []);

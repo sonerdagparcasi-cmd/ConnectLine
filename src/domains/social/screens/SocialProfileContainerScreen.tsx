@@ -37,13 +37,13 @@ import {
 } from "../services/socialFeedStateService";
 import {
   blockUser,
+  getCurrentSocialUserId,
   getMutualConnections,
   getSuggestedUsers,
-  isFollowing,
   isUserBlocked,
+  socialFollowService,
   sendFollowRequest,
   subscribeFollow,
-  toggleFollow,
   unblockUser,
 } from "../services/socialFollowService";
 import type { SocialPost } from "../types/social.types";
@@ -61,7 +61,11 @@ export default function SocialProfileContainerScreen() {
   const { isOwner, profile, stats } = useSocialProfile(profileUserId);
 
   const [tab, setTab] = useState<Tab>("posts");
-  const [following, setFollowing] = useState(() => isFollowing(profile.userId));
+  const [followTick, setFollowTick] = useState(0);
+  const currentUserId = getCurrentSocialUserId();
+  const [following, setFollowing] = useState(() =>
+    socialFollowService.isFollowing(currentUserId, profile.userId)
+  );
   const [blocked, setBlocked] = useState(() => isUserBlocked(profile.userId));
 
   const [feedPosts, setFeedPosts] = useState<SocialPost[]>(() =>
@@ -73,7 +77,9 @@ export default function SocialProfileContainerScreen() {
 
   useEffect(() => {
     const sync = () => {
-      setFollowing(isFollowing(profile.userId));
+      setFollowing(
+        socialFollowService.isFollowing(currentUserId, profile.userId)
+      );
       setBlocked(isUserBlocked(profile.userId));
       setFeedPosts(getProfilePostsVisibleToCurrentUser(profile.userId));
       setSavedList(getSavedPosts());
@@ -85,7 +91,16 @@ export default function SocialProfileContainerScreen() {
       unsubFeed();
       unsubFollow();
     };
-  }, [profile.userId]);
+  }, [profile.userId, currentUserId]);
+
+  const handleFollow = useCallback(() => {
+    if (socialFollowService.isFollowing(currentUserId, profile.userId)) {
+      socialFollowService.unfollow(currentUserId, profile.userId);
+    } else {
+      socialFollowService.follow(currentUserId, profile.userId);
+    }
+    setFollowTick((prev) => prev + 1);
+  }, [currentUserId, profile.userId]);
 
   useEffect(() => {
     if (!isOwner && blocked) {
@@ -249,9 +264,7 @@ export default function SocialProfileContainerScreen() {
                     <TouchableOpacity
                       activeOpacity={0.6}
                       style={styles.textAction}
-                      onPress={() => {
-                        sendFollowRequest("me", profile.userId);
-                      }}
+                      onPress={handleFollow}
                     >
                       <Text style={[styles.baseText, { color: primaryText }]}>Takip Et</Text>
                     </TouchableOpacity>
@@ -261,9 +274,7 @@ export default function SocialProfileContainerScreen() {
                     <TouchableOpacity
                       activeOpacity={0.6}
                       style={styles.textAction}
-                      onPress={() => {
-                        toggleFollow(profile.userId);
-                      }}
+                      onPress={handleFollow}
                     >
                       <Text style={[styles.baseText, { color: primaryText }]}>Takibi Bırak</Text>
                     </TouchableOpacity>
@@ -456,8 +467,15 @@ export default function SocialProfileContainerScreen() {
               <View key={user.userId} style={styles.suggestedCardWrap}>
                 <SocialSuggestedUserCard
                   user={user}
-                  isFollowing={isFollowing(user.userId)}
-                  onFollow={() => toggleFollow(user.userId)}
+                  isFollowing={socialFollowService.isFollowing(currentUserId, user.userId)}
+                  onFollow={() => {
+                    if (socialFollowService.isFollowing(currentUserId, user.userId)) {
+                      socialFollowService.unfollow(currentUserId, user.userId);
+                    } else {
+                      socialFollowService.follow(currentUserId, user.userId);
+                    }
+                    setFollowTick((prev) => prev + 1);
+                  }}
                   onPress={() =>
                     navigation.navigate("SocialProfileContainer", {
                       userId: user.userId,
@@ -469,7 +487,7 @@ export default function SocialProfileContainerScreen() {
           </ScrollView>
         </View>
       ),
-    [T, profileSuggested, navigation]
+    [T, profileSuggested, navigation, currentUserId, followTick]
   );
 
   const EmptyGrid = useCallback(

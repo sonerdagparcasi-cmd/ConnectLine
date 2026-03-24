@@ -13,10 +13,7 @@ import SocialScreenLayout from "../components/SocialScreenLayout";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import {
   applySocialNotificationNavigation,
-  getNotifications,
-  markNotificationRead,
-  markAllNotificationsRead,
-  subscribeNotifications,
+  socialNotificationService,
 } from "../services/socialNotificationService";
 import type { SocialNotification } from "../types/social.types";
 
@@ -25,24 +22,24 @@ type Nav = NativeStackNavigationProp<SocialStackParamList>;
 export default function SocialNotificationsScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<Nav>();
-  const [list, setList] = useState(() => getNotifications());
+  const [list, setList] = useState(() => socialNotificationService.getAll());
 
   useEffect(() => {
-    const unsub = subscribeNotifications(() => {
-      setList([...getNotifications()]);
-    });
-    return unsub;
+    const interval = setInterval(() => {
+      setList([...socialNotificationService.getAll()]);
+    }, 500);
+    return () => clearInterval(interval);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      markAllNotificationsRead();
+      socialNotificationService.markAllAsRead();
     }, [])
   );
 
   const openRow = useCallback(
     (n: SocialNotification) => {
-      markNotificationRead(n.id);
+      socialNotificationService.markAsRead(n.id);
       if (
         applySocialNotificationNavigation(n, (screen, params) => {
           (navigation as { navigate: (s: string, p?: object) => void }).navigate(
@@ -104,7 +101,7 @@ export default function SocialNotificationsScreen() {
           <Text style={[styles.line, { color: T.textColor }]}>
             <Text style={styles.name}>{n.actorUsername}</Text>
             {" "}
-            {n.text}
+            {t(n.text)}
           </Text>
           <Text style={[styles.time, { color: T.mutedText }]}>
             {new Date(n.createdAt).toLocaleString()}
