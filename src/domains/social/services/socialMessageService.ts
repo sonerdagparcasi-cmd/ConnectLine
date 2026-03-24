@@ -90,7 +90,7 @@ export const socialMessageService = {
       existing.unreadCount = (existing.unreadCount || 0) + 1;
     } else {
       conversations.unshift({
-        id: Date.now().toString(),
+        id: Date.now().toString() + "_" + Math.random().toString(36).slice(2),
         userId: senderId,
         lastMessage,
         unreadCount: 1,

@@ -97,7 +97,7 @@ export default function SocialChatScreen() {
             style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}
             data={messages}
             initialNumToRender={20}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => item.id + "_" + index}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
               paddingBottom: 80,
