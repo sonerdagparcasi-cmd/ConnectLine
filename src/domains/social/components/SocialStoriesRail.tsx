@@ -251,6 +251,7 @@ export default function SocialStoriesRail({
                     name={isOwn ? "Sen" : item.username}
                     uri={item.avatarUri ?? null}
                     userId={item.userId}
+                    onPress={() => onOpenStory(item.userId)}
                     seen={allSeenByMe}
                     active={index === activeIndex}
                     isMe={isOwn}

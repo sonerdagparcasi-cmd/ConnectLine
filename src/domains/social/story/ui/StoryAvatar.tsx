@@ -133,6 +133,7 @@ export default function StoryAvatar({
   isMe,
   ringAnim,
   premiumUI,
+  onPress,
 }: {
   name: string;
   uri: string | null;
@@ -143,16 +144,22 @@ export default function StoryAvatar({
   ringAnim?: Animated.Value;
   /** SocialStoriesRail premium: beyaz label, add badge, basınç scale, seen soluk */
   premiumUI?: boolean;
+  onPress?: () => void;
 }) {
   const T = useAppTheme();
   const navigation = useNavigation<any>();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const openStory = () =>
+  const openStory = () => {
+    if (onPress) {
+      onPress();
+      return;
+    }
     navigation.navigate("SocialStoryViewer", {
       initialUserId: userId,
       initialStoryIndex: 0,
     });
+  };
 
   const springTo = (to: number) =>
     Animated.spring(scaleAnim, {

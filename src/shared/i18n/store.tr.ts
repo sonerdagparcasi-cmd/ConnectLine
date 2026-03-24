@@ -7,6 +7,8 @@ export const storeTR = {
   started_following_you: "seni takip etmeye başladı",
   liked_your_post: "gönderini beğendi",
   commented_on_post: "gönderine yorum yaptı",
+  story_reply_placeholder: "Yanıt yaz...",
+  story_published: "Hikaye paylaşıldı",
 
   chat: {
     send: "Gönder",

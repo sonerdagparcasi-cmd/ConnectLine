@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { t } from "../../../../shared/i18n/t";
 
 import { switchTestUser, useSocialProfile } from "../../hooks/useSocialProfile";
 import { sendSocialMessage } from "../../services/socialMessageService";
@@ -27,14 +28,13 @@ import { getCurrentSocialUserId } from "../../services/socialFollowService";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
 import {
   addReaction,
-  addStoryView,
   deleteStory,
   getStories,
   getStoryMeta,
   getStoryViewers,
   getUserDisplay,
-  markStorySeen,
   markStoryViewed,
+  socialStoryStateService,
   subscribeStories,
 } from "../services/socialStoryStateService";
 import {
@@ -43,7 +43,6 @@ import {
 } from "../../services/socialFeedBridgeService";
 import {
   addStoryReaction,
-  addStoryReply,
   getStoryReplyCount,
   subscribeStoryReplies,
 } from "../../services/socialStoryReplyService";
@@ -212,12 +211,7 @@ export default function SocialStoryViewerScreen() {
 
   useEffect(() => {
     if (!current?.id || !currentUserId) return;
-    markStorySeen(current.id, currentUserId);
-    if (!isOwner) {
-      const viewerName =
-        profile?.username?.trim() || getUserDisplay(currentUserId).username;
-      addStoryView(current.id, currentUserId, viewerName);
-    }
+    socialStoryStateService.addView(current.id, currentUserId);
   }, [storyIndex, currentUserId, current?.id, isOwner, profile?.username]);
 
   function stopPlayback() {
@@ -746,7 +740,7 @@ export default function SocialStoryViewerScreen() {
               <TextInput
                 value={reply}
                 onChangeText={setReply}
-                placeholder="Story’ye cevap ver"
+                placeholder={t("story_reply_placeholder")}
                 placeholderTextColor={T.mutedText}
                 style={[styles.replyInput, { color: T.textColor }]}
                 multiline
@@ -774,13 +768,12 @@ export default function SocialStoryViewerScreen() {
               onPress={() => {
                 const text = reply.trim();
                 if (!text || !currentUserId) return;
-                addStoryReply(
-                  story.id,
-                  currentUserId,
-                  profile?.username ?? "Sen",
+                socialStoryStateService.addReply(story.id, {
+                  userId: currentUserId,
                   text,
-                  group.userId
-                );
+                  username: profile?.username ?? "Sen",
+                  targetUserId: group.userId,
+                });
                 sendSocialMessage({
                   id: `msg_${Date.now()}`,
                   senderId: currentUserId,

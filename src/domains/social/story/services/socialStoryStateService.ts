@@ -3,6 +3,7 @@
 
 import type { SocialStory } from "../../types/social.types";
 import { clearRepliesForStory } from "../../services/socialStoryReplyService";
+import { addStoryReply, getStoryReplies } from "../../services/socialStoryReplyService";
 
 const MOCK_USERS = [
   {
@@ -150,6 +151,34 @@ export function addStory(
   }
 }
 
+export function createStory(
+  story: Partial<SocialStory> & {
+    userId: string;
+    media?: SocialStory["media"];
+    text?: string;
+  }
+) {
+  const newStory: SocialStory = {
+    id: story.id ?? Date.now().toString(),
+    userId: story.userId,
+    username: story.username ?? getUserDisplay(story.userId).username,
+    userAvatarUri: story.userAvatarUri ?? getUserDisplay(story.userId).avatarUri,
+    media: story.media ?? null,
+    visibility: story.visibility ?? "public",
+    createdAt:
+      typeof story.createdAt === "string"
+        ? story.createdAt
+        : new Date().toISOString(),
+    textNote: story.text ?? story.textNote,
+    caption: story.caption,
+    overlays: story.overlays,
+    music: story.music ?? null,
+  };
+
+  addStory(newStory);
+  return newStory;
+}
+
 export function deleteStory(storyId: string) {
   userStories = userStories.filter((s) => s.id !== storyId);
   viewedStories.delete(storyId);
@@ -178,6 +207,12 @@ export function addStoryView(storyId: string, viewerUserId: string, viewerUserna
   emitStoryChange();
 }
 
+export function addView(storyId: string, userId: string) {
+  const display = getUserDisplay(userId);
+  markStorySeen(storyId, userId);
+  addStoryView(storyId, userId, display.username);
+}
+
 export function getStoryViewers(storyId: string): StoryViewEntry[] {
   return storyViewers[storyId] ?? [];
 }
@@ -203,6 +238,34 @@ export function addReaction(storyId: string, userId: string, emoji: string) {
   });
   emitStoryChange();
 }
+
+export function addReply(
+  storyId: string,
+  reply: { userId: string; text: string; username?: string; targetUserId?: string }
+) {
+  if (!reply.text.trim()) return null;
+  const sender = getUserDisplay(reply.userId);
+  return addStoryReply(
+    storyId,
+    reply.userId,
+    reply.username ?? sender.username,
+    reply.text.trim(),
+    reply.targetUserId
+  );
+}
+
+export function getReplies(storyId: string) {
+  return getStoryReplies(storyId);
+}
+
+export const socialStoryStateService = {
+  createStory,
+  getStories,
+  addView,
+  addReply,
+  getReplies,
+  subscribeStories,
+};
 
 export function getStoryMeta(storyId: string): StoryMeta {
   return ensureMeta(storyId);

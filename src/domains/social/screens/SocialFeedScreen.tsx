@@ -15,6 +15,7 @@ import { useAppTheme } from "../../../shared/theme/appTheme";
 import SocialNotificationBell from "../components/SocialNotificationBell";
 import SocialPostCard from "../components/SocialPostCard";
 import SocialPostSkeleton from "../components/SocialPostSkeleton";
+import SocialFeedHeader from "../components/SocialFeedHeader";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 import {
   loadInitial,
@@ -22,7 +23,12 @@ import {
   subscribeFeed,
 } from "../services/socialFeedStateService";
 import { subscribeFollow } from "../services/socialFollowService";
+import {
+  getStories,
+  subscribeStories,
+} from "../services/socialStoryStateService";
 import type { SocialPost } from "../types/social.types";
+import type { SocialStory } from "../types/social.types";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
 
@@ -36,11 +42,13 @@ export default function SocialFeedScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [visibleIndex, setVisibleIndex] = useState(0);
+  const [stories, setStories] = useState<SocialStory[]>([]);
 
   useEffect(() => {
     const initial = loadInitial();
     setFeed(initial.feed);
     setHasMore(initial.hasMore);
+    setStories(getStories());
     setLoading(false);
 
     const unsubFeed = subscribeFeed(() => {
@@ -49,9 +57,13 @@ export default function SocialFeedScreen() {
     const unsubFollow = subscribeFollow(() => {
       setFeed((prev) => [...prev]);
     });
+    const unsubStories = subscribeStories(() => {
+      setStories(getStories());
+    });
     return () => {
       unsubFeed();
       unsubFollow();
+      unsubStories();
     };
   }, []);
   const visiblePosts = useMemo(() => feed, [feed]);
@@ -121,6 +133,17 @@ export default function SocialFeedScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListHeaderComponent={
+          <SocialFeedHeader
+            stories={stories}
+            onOpenStory={(userId) =>
+              navigation.navigate("SocialStoryViewer", {
+                initialUserId: userId,
+                initialStoryIndex: 0,
+              })
+            }
+          />
+        }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={

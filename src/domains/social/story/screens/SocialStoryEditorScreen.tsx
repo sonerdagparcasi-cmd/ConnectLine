@@ -6,6 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ResizeMode, Video } from "expo-av";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Dimensions,
   Image,
   Keyboard,
@@ -30,8 +31,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useSocialProfile } from "../../hooks/useSocialProfile";
 import type { SocialStackParamList } from "../../navigation/SocialNavigator";
-import { addStory } from "../../services/socialStoryStateService";
+import { socialStoryStateService } from "../../services/socialStoryStateService";
 import type { SocialStory } from "../../types/social.types";
+import { t } from "../../../../shared/i18n/t";
 
 const TEXT_COLORS = [
   "#FFFFFF",
@@ -157,7 +159,7 @@ export default function SocialStoryEditorScreen() {
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  const handleShare = () => {
+  const handlePublish = () => {
     if (!media?.uri) return;
     const uid = profile?.userId ?? "u1";
     const uname = profile?.username ?? "Sen";
@@ -181,7 +183,8 @@ export default function SocialStoryEditorScreen() {
         color: textColor,
       },
     };
-    addStory(story);
+    socialStoryStateService.createStory(story);
+    Alert.alert(t("story_published"));
     Keyboard.dismiss();
     if (navigation.canGoBack()) navigation.goBack();
     if (navigation.canGoBack()) navigation.goBack();
@@ -334,9 +337,9 @@ export default function SocialStoryEditorScreen() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity onPress={handleShare} hitSlop={12}>
+              <TouchableOpacity onPress={handlePublish} hitSlop={12}>
                 <Text style={{ color: colors.primary, fontWeight: "800", fontSize: 16 }}>
-                  Paylaş
+                  {t("share")}
                 </Text>
               </TouchableOpacity>
             </View>
