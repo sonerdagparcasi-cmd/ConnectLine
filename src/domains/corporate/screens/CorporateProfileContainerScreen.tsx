@@ -4,8 +4,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useMemo } from "react";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Image,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import ProfileVisitorActions from "../components/ProfileVisitorActions";
@@ -22,6 +29,9 @@ export default function CorporateProfileContainerScreen() {
   const T = useAppTheme();
   const nav = useNavigation<any>();
   const route = useRoute<any>();
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editCompanyName, setEditCompanyName] = useState("");
+  const [editAbout, setEditAbout] = useState("");
 
   const stableCompanyId = useMemo(() => {
     const id = route?.params?.companyId;
@@ -92,6 +102,11 @@ export default function CorporateProfileContainerScreen() {
 
   const growth30 = Math.round(followers * 0.07);
 
+  useEffect(() => {
+    setEditCompanyName(displayName);
+    setEditAbout(norm(profileView.about));
+  }, [displayName, profileView.about]);
+
   const recruiterStatus =
     activeJobs > 0
       ? { icon: "ellipse", text: "Yeni başvurular var", color: "#10fd08" }
@@ -100,6 +115,85 @@ export default function CorporateProfileContainerScreen() {
           text: "Şu anda işe alım yok",
           color: T.mutedText,
         };
+
+  if (isEditMode) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          padding: 16,
+          backgroundColor: T.backgroundColor,
+        }}
+      >
+        <Text
+          style={{
+            fontWeight: "700",
+            marginBottom: 8,
+            color: T.textColor,
+          }}
+        >
+          Sirket Adi
+        </Text>
+
+        <TextInput
+          value={editCompanyName}
+          onChangeText={setEditCompanyName}
+          placeholder="Sirket adi"
+          placeholderTextColor={T.mutedText}
+          style={{
+            borderWidth: 1,
+            borderColor: T.border,
+            color: T.textColor,
+            borderRadius: 10,
+            padding: 12,
+            marginBottom: 12,
+            backgroundColor: T.cardBg,
+          }}
+        />
+
+        <Text
+          style={{
+            fontWeight: "700",
+            marginBottom: 8,
+            color: T.textColor,
+          }}
+        >
+          Hakkinda
+        </Text>
+
+        <TextInput
+          value={editAbout}
+          onChangeText={setEditAbout}
+          placeholder="Sirket hakkinda"
+          placeholderTextColor={T.mutedText}
+          multiline
+          style={{
+            borderWidth: 1,
+            borderColor: T.border,
+            borderRadius: 10,
+            padding: 12,
+            color: T.textColor,
+            height: 100,
+            marginBottom: 20,
+            textAlignVertical: "top",
+            backgroundColor: T.cardBg,
+          }}
+        />
+
+        <TouchableOpacity
+          onPress={() => setIsEditMode(false)}
+          style={{
+            backgroundColor: T.accent,
+            padding: 14,
+            borderRadius: 10,
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "700" }}>Kaydet</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -196,6 +290,24 @@ export default function CorporateProfileContainerScreen() {
                   {recruiterStatus.text}
                 </Text>
               </View>
+            )}
+
+            {isOwner && (
+              <TouchableOpacity
+                onPress={() => setIsEditMode(true)}
+                style={{
+                  alignSelf: "flex-start",
+                  marginTop: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: T.border,
+                  backgroundColor: T.cardBg,
+                }}
+              >
+                <Text style={{ fontWeight: "700", color: T.textColor }}>Duzenle</Text>
+              </TouchableOpacity>
             )}
           </View>
 
