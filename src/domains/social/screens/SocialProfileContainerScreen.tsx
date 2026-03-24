@@ -46,6 +46,7 @@ import {
   subscribeFollow,
   unblockUser,
 } from "../services/socialFollowService";
+import { socialMessageService } from "../services/socialMessageService";
 import type { SocialPost } from "../types/social.types";
 
 type Nav = NativeStackNavigationProp<SocialStackParamList>;
@@ -134,6 +135,9 @@ export default function SocialProfileContainerScreen() {
   const dangerText = T.isDark ? "#ff6b6b" : "#e11d48";
   const tabUnderlineColor = T.isDark ? "#00bfff" : "#1834ae";
   const websiteColor = T.isDark ? "#00bfff" : "#1834ae";
+  const totalUnread = socialMessageService
+    .getConversations()
+    .reduce((acc, c) => acc + c.unreadCount, 0);
   const headerGradient = useMemo(
     () =>
       T.isDark
@@ -347,6 +351,18 @@ export default function SocialProfileContainerScreen() {
             label="Etkinlik Oluştur"
             active={false}
             onPress={() => navigation.navigate("SocialCreateEvent")}
+            activeColor={primaryText}
+            inactiveColor={mutedTextColor}
+            tabUnderlineColor={tabUnderlineColor}
+          />
+          <TabBtn
+            label={
+              totalUnread > 0
+                ? `${t("messages")} (${totalUnread > 99 ? "99+" : totalUnread})`
+                : t("messages")
+            }
+            active={false}
+            onPress={() => navigation.navigate("SocialInboxScreen")}
             activeColor={primaryText}
             inactiveColor={mutedTextColor}
             tabUnderlineColor={tabUnderlineColor}

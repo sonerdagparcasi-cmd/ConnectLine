@@ -77,6 +77,7 @@ export type SocialStackParamList = {
   SocialNotifications: undefined;
 
   SocialInbox: undefined;
+  SocialInboxScreen: undefined;
   SocialChat: { userId: string };
   SocialChatScreen: { userId: string };
 
@@ -181,6 +182,11 @@ export default function SocialNavigator({ entry = "feed" }: Props) {
 
       <Stack.Screen
         name="SocialInbox"
+        component={SocialInboxScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SocialInboxScreen"
         component={SocialInboxScreen}
         options={{ headerShown: false }}
       />

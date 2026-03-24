@@ -4,6 +4,7 @@
 import type { SocialStory } from "../../types/social.types";
 import { clearRepliesForStory } from "../../services/socialStoryReplyService";
 import { addStoryReply, getStoryReplies } from "../../services/socialStoryReplyService";
+import { socialMessageService } from "../../services/socialMessageService";
 
 const MOCK_USERS = [
   {
@@ -245,13 +246,21 @@ export function addReply(
 ) {
   if (!reply.text.trim()) return null;
   const sender = getUserDisplay(reply.userId);
-  return addStoryReply(
+  const created = addStoryReply(
     storyId,
     reply.userId,
     reply.username ?? sender.username,
     reply.text.trim(),
     reply.targetUserId
   );
+  socialMessageService.pushMessage({
+    type: "story_reply",
+    userId: reply.userId,
+    text: reply.text.trim(),
+    storyId,
+    targetUserId: reply.targetUserId,
+  });
+  return created;
 }
 
 export function getReplies(storyId: string) {

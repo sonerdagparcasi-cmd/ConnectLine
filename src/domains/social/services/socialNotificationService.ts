@@ -9,6 +9,7 @@
 
 import type { SocialNotification } from "../types/social.types";
 import { subscribeEvents, type SocialEvent } from "./socialFeedStateService";
+import { socialMessageService } from "./socialMessageService";
 
 /* ------------------------------------------------------------------ */
 /* STORE                                                              */
@@ -56,8 +57,7 @@ export const socialNotificationService = {
     postId?: string;
     message?: string;
   }) {
-    const now = new Date().toISOString();
-    addNotification({
+    const item: SocialNotification = {
       id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: (notification.type as SocialNotification["type"]) ?? "like",
       actorUserId: notification.userId ?? "u1",
@@ -68,9 +68,14 @@ export const socialNotificationService = {
       postId: notification.postId,
       targetPostId: notification.postId,
       text: notification.message ?? "",
-      createdAt: now,
+      createdAt: new Date().toISOString(),
       read: false,
-    });
+    };
+
+    addNotification(item);
+
+    // 🔥 SYNC
+    syncToInbox(item);
   },
 
   markAsRead(id: string) {
@@ -539,3 +544,48 @@ subscribeEvents((event) => {
   if (!notification) return;
   addNotification(notification);
 });
+
+function syncToInbox(notification: {
+  id?: string;
+  type: string;
+  userId?: string;
+  actorUserId?: string;
+  storyId?: string;
+  message?: string;
+  text?: string;
+  emoji?: string;
+}) {
+  const userId = notification.userId ?? notification.actorUserId;
+
+  if (notification.type === "story_emoji") {
+    socialMessageService.pushMessage({
+      id: notification.id,
+      type: "message",
+      userId,
+      text: `❤️ ${notification.emoji || ""}`.trim(),
+      storyId: notification.storyId,
+    } as any);
+    return;
+  }
+
+  if (notification.type === "story_reply") {
+    socialMessageService.pushMessage({
+      id: notification.id,
+      type: "message",
+      userId,
+      text: notification.message ?? notification.text ?? "",
+      storyId: notification.storyId,
+    } as any);
+    return;
+  }
+
+  if (notification.type === "message") {
+    socialMessageService.pushMessage({
+      id: notification.id,
+      type: "message",
+      userId,
+      text: notification.message ?? notification.text ?? "",
+      storyId: notification.storyId,
+    } as any);
+  }
+}

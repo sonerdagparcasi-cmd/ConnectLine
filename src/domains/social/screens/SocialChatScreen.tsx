@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSocialProfile } from "../hooks/useSocialProfile";
 import {
   getSocialMessages,
+  socialMessageService,
   sendSocialMessage,
 } from "../services/socialMessageService";
 
@@ -46,6 +47,12 @@ export default function SocialChatScreen() {
   const route = useRoute<any>();
 
   const otherUserId = route.params?.userId;
+  const conversationId = otherUserId;
+
+  useEffect(() => {
+    if (!conversationId) return;
+    socialMessageService.markAsRead(conversationId);
+  }, [conversationId]);
 
   const [text, setText] = useState("");
   const [listVersion, setListVersion] = useState(0);

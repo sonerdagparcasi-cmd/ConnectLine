@@ -1,41 +1,55 @@
+import { useEffect, useState } from "react";
 import { View, Text, FlatList, TouchableOpacity, Image } from "react-native";
-import { getSocialMessages } from "../services/socialMessageService";
+import { t } from "../../../shared/i18n/t";
+import { useAppTheme } from "@/core/theme/useAppTheme";
+import { socialMessageService } from "../services/socialMessageService";
 import { useSocialProfile } from "../hooks/useSocialProfile";
 import { useNavigation } from "@react-navigation/native";
 import { getUserDisplay } from "../story/services/socialStoryStateService";
 
 export default function SocialInboxScreen() {
   const { profile } = useSocialProfile();
+  const { colors } = useAppTheme();
   const navigation = useNavigation<any>();
+  const [list, setList] = useState(() => socialMessageService.getConversations());
 
-  const messages = getSocialMessages(profile.userId);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setList([...socialMessageService.getConversations()]);
+    }, 500);
 
-  console.log("ACTIVE USER:", profile.userId);
-  console.log("ALL MESSAGES:", getSocialMessages(profile.userId));
-
-  // konuşmaları grupla (basit)
-  const conversations = Object.values(
-    messages.reduce((acc: any, msg) => {
-      const otherUser =
-        msg.senderId === profile.userId
-          ? msg.receiverId
-          : msg.senderId;
-
-      if (!acc[otherUser]) acc[otherUser] = msg;
-      return acc;
-    }, {})
-  );
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000", padding: 16 }}>
+    <View style={{ flex: 1, backgroundColor: colors.background, padding: 16 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
+        <Text style={{ color: colors.text, fontWeight: "700", fontSize: 18 }}>
+          {t("messages")}
+        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            socialMessageService.markAllAsRead();
+            setList([...socialMessageService.getConversations()]);
+          }}
+        >
+          <Text style={{ color: "#1DA1F2", fontWeight: "600" }}>
+            {t("mark_all_read")}
+          </Text>
+        </TouchableOpacity>
+      </View>
       <FlatList
-        data={conversations}
+        data={list}
         keyExtractor={(item: any) => item.id}
         renderItem={({ item }: any) => {
-          const otherUser =
-            item.senderId === profile.userId
-              ? item.receiverId
-              : item.senderId;
+          const otherUser = item.userId ?? profile.userId;
 
           const user = getUserDisplay(otherUser);
 
@@ -75,21 +89,43 @@ export default function SocialInboxScreen() {
                     justifyContent: "center",
                   }}
                 >
-                  <Text style={{ color: "#fff" }}>👤</Text>
+                  <Text style={{ color: colors.text }}>👤</Text>
                 </View>
               )}
 
               <View style={{ flex: 1 }}>
-                <Text style={{ color: "#fff", fontWeight: "700" }}>
+                <Text style={{ color: colors.text, fontWeight: "700" }}>
                   {user.username}
                 </Text>
 
-                <Text style={{ color: "#aaa", marginTop: 4 }}>
-                  {item.type === "story_reply"
-                    ? "📸 Story’ye yanıt"
-                    : item.text}
+                <Text style={{ color: "#aaa", marginTop: 4 }} numberOfLines={1}>
+                  {item.lastMessage?.text ?? ""}
                 </Text>
               </View>
+
+              {item.unreadCount > 0 && (
+                <View
+                  style={{
+                    minWidth: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    backgroundColor: colors.primary,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    paddingHorizontal: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#fff",
+                      fontSize: 12,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {item.unreadCount > 9 ? "9+" : item.unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         }}

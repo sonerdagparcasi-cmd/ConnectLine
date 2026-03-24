@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
   railWrap: {},
 
   gradientWrap: {
-    paddingTop: 3,
-    paddingBottom: 6,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
 
   wrap: {

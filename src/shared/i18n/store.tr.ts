@@ -29,6 +29,8 @@ export const storeTR = {
   retry: "Tekrar dene",
   explore: "Keşfet",
   suggested_for_you: "Senin için önerilenler",
+  messages: "Mesajlar",
+  mark_all_read: "Tümünü okundu yap",
 
   chat: {
     send: "Gönder",
