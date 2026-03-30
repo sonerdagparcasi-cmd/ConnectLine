@@ -122,6 +122,7 @@ const mockEvents: SocialEvent[] = [
     isJoined: true,
   },
 ];
+const events = mockEvents;
 
 /* ------------------------------------------------------------------ */
 /* SERVICE                                                            */
@@ -316,4 +317,49 @@ export const socialEventService = {
   async getEventInvitedUsers(eventId: string) {
     return mockInvites.filter((i) => i.eventId === eventId);
   },
+};
+
+export const isValidTime = (value: string) => {
+  // sadece HH:mm formatı
+  const regex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  return regex.test(value);
+};
+
+export const isValidDate = (value: string) => {
+  // YYYY-MM-DD format
+  const regex = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+  if (!regex.test(value)) return false;
+
+  const date = new Date(value);
+  return !isNaN(date.getTime());
+};
+
+export const isFutureDate = (value: string) => {
+  const today = new Date();
+  const input = new Date(value);
+
+  today.setHours(0, 0, 0, 0);
+  input.setHours(0, 0, 0, 0);
+
+  return input >= today;
+};
+
+export const createEvent = (
+  event: SocialEvent & { time: string; date: string }
+) => {
+  if (!isValidDate(event.date)) {
+    throw new Error("INVALID_DATE");
+  }
+
+  if (!isValidTime(event.time)) {
+    throw new Error("INVALID_TIME");
+  }
+
+  if (!isFutureDate(event.date)) {
+    throw new Error("PAST_DATE");
+  }
+
+  events.unshift(event);
+  return event;
 };

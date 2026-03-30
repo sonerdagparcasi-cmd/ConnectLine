@@ -3,6 +3,8 @@
 export type SocialVisibility = "public" | "hidden" | "followers" | "private";
 
 export type SocialMediaType = "image" | "video";
+export type EventTimeString = `${number}:${number}`; // HH:mm
+export type EventDateString = `${number}-${number}-${number}`; // YYYY-MM-DD
 
 /* -------------------------------------------------------------------------- */
 /* MUSIC                                                                      */

@@ -22,7 +22,11 @@ import * as ImagePicker from "expo-image-picker";
 import { useAppTheme } from "../../../shared/theme/appTheme";
 
 import SocialScreenLayout from "../components/SocialScreenLayout";
-import { socialEventService } from "../services/socialEventService";
+import {
+  isValidDate,
+  isValidTime,
+  socialEventService,
+} from "../services/socialEventService";
 
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 
@@ -31,6 +35,23 @@ import type { SocialStackParamList } from "../navigation/SocialNavigator";
 type Route = RouteProp<SocialStackParamList, "SocialCreateEvent">;
 
 /* ------------------------------------------------------------------ */
+
+const formatTime = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+};
+
+const formatDate = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6)
+    return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+};
 
 export default function SocialCreateEventScreen() {
   const T = useAppTheme();
@@ -108,6 +129,16 @@ export default function SocialCreateEventScreen() {
 
     if (!cleanTitle) {
       Alert.alert("Başlık gerekli");
+      return;
+    }
+
+    if (!isValidDate(date)) {
+      Alert.alert("Geçersiz tarih", "Lütfen YYYY-MM-DD formatında girin");
+      return;
+    }
+
+    if (!isValidTime(time)) {
+      Alert.alert("Geçersiz saat", "Lütfen HH:mm formatında girin");
       return;
     }
 
@@ -243,8 +274,12 @@ export default function SocialCreateEventScreen() {
 
         <TextInput
           value={date}
-          onChangeText={setDate}
-          placeholder="2026-03-25"
+          onChangeText={(text) => {
+            const formatted = formatDate(text);
+            setDate(formatted);
+          }}
+          placeholder="YYYY-MM-DD"
+          keyboardType="numeric"
           placeholderTextColor={T.mutedText}
           style={[
             styles.input,
@@ -262,8 +297,12 @@ export default function SocialCreateEventScreen() {
 
         <TextInput
           value={time}
-          onChangeText={setTime}
+          onChangeText={(text) => {
+            const formatted = formatTime(text);
+            setTime(formatted);
+          }}
           placeholder="19:00"
+          keyboardType="numeric"
           placeholderTextColor={T.mutedText}
           style={[
             styles.input,
