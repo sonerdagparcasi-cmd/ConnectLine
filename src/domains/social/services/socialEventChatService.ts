@@ -1,5 +1,6 @@
 // src/domains/social/services/socialEventChatService.ts
 // 🔒 SOCIAL EVENT CHAT SERVICE (UI-ONLY)
+import { canSendEventMessage } from "./socialEventService";
 
 export type SocialEventChatMessage = {
   id: string;
@@ -49,6 +50,8 @@ export const socialEventChatService = {
 
   async sendMessage(eventId: string, text: string) {
     if (!text.trim()) return;
+    const allowed = canSendEventMessage(eventId, CURRENT_USER.userId);
+    if (!allowed) return;
 
     const message: SocialEventChatMessage = {
       id: `msg_${Date.now()}`,
@@ -86,6 +89,49 @@ export const socialEventChatService = {
       listeners[eventId] = listeners[eventId].filter((l) => l !== listener);
     };
   },
+};
+
+export const sendEventMessage = (
+  eventId: string,
+  userId: string,
+  text: string
+) => {
+  const allowed = canSendEventMessage(eventId, userId);
+
+  if (!allowed) {
+    return {
+      success: false,
+      error: "BLOCKED_BY_EVENT_MANAGER" as const,
+    };
+  }
+
+  // mevcut mesaj gönderme sistemi
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return {
+      success: false,
+      error: "EMPTY_MESSAGE" as const,
+    };
+  }
+
+  const message: SocialEventChatMessage = {
+    id: `msg_${Date.now()}`,
+    eventId,
+    userId,
+    username: userId === CURRENT_USER.userId ? CURRENT_USER.username : userId,
+    text: trimmed,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!chatStorage[eventId]) {
+    chatStorage[eventId] = [];
+  }
+  chatStorage[eventId].push(message);
+  emit(eventId);
+
+  return {
+    success: true as const,
+  };
 };
 
 /* ------------------------------------------------------------------ */

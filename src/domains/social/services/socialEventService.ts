@@ -4,6 +4,7 @@
 // - Event Cover Photo
 // - Event Invite System
 import { emitSocialEvent } from "./socialFeedStateService";
+import type { SocialEvent as RoleSocialEvent } from "../types/social.types";
 
 export type SocialEventParticipant = {
   userId: string;
@@ -122,7 +123,7 @@ const mockEvents: SocialEvent[] = [
     isJoined: true,
   },
 ];
-const events = mockEvents;
+let events: RoleSocialEvent[] = [];
 
 /* ------------------------------------------------------------------ */
 /* SERVICE                                                            */
@@ -345,8 +346,304 @@ export const isFutureDate = (value: string) => {
   return input >= today;
 };
 
+/**
+ * 🔥 GET ROLE
+ */
+const getUserRole = (event: RoleSocialEvent, userId: string) => {
+  return event.participants.find((p) => p.userId === userId)?.role;
+};
+
+/**
+ * 🔥 JOIN REQUEST MODEL (çoklu onay)
+ */
+type JoinApproval = {
+  userId: string; // başvuran kişi
+  approvedBy: string[]; // kimler onayladı
+};
+
+const joinApprovals: Record<string, JoinApproval[]> = {};
+// eventId → approvals list
+
+/**
+ * JOIN REQUEST (PENDING + approval başlat)
+ */
+export const requestToJoin = (eventId: string, userId: string) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return;
+
+  const exists = event.participants.find((p) => p.userId === userId);
+  if (exists) return;
+
+  event.participants.push({
+    userId,
+    role: "PENDING",
+  });
+
+  if (!joinApprovals[eventId]) {
+    joinApprovals[eventId] = [];
+  }
+
+  joinApprovals[eventId].push({
+    userId,
+    approvedBy: [],
+  });
+};
+
+/**
+ * 🔥 APPROVE (OWNER + ADMIN)
+ */
+export const approveParticipant = (
+  eventId: string,
+  targetUserId: string,
+  approverId: string
+) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return;
+
+  const approver = event.participants.find((p) => p.userId === approverId);
+
+  // sadece OWNER / ADMIN onaylayabilir
+  if (!approver || (approver.role !== "OWNER" && approver.role !== "ADMIN")) {
+    return;
+  }
+
+  const approvals = joinApprovals[eventId];
+  if (!approvals) return;
+
+  const record = approvals.find((a) => a.userId === targetUserId);
+  if (!record) return;
+
+  // aynı kişi 2 kere onaylayamaz
+  if (record.approvedBy.includes(approverId)) return;
+
+  record.approvedBy.push(approverId);
+
+  /**
+   * 🔥 GEREKLİ ONAY SAYISI
+   * OWNER + ADMIN sayısı kadar
+   */
+  const requiredApprovals = event.participants.filter(
+    (p) => p.role === "OWNER" || p.role === "ADMIN"
+  ).length;
+
+  if (record.approvedBy.length >= requiredApprovals) {
+    // FULL APPROVED → MEMBER
+    event.participants = event.participants.map((p) =>
+      p.userId === targetUserId ? { ...p, role: "MEMBER" } : p
+    );
+  }
+};
+
+/**
+ * 🔥 REJECT (tek kişi yeterli)
+ */
+export const rejectParticipant = (eventId: string, targetUserId: string) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return;
+
+  event.participants = event.participants.map((p) =>
+    p.userId === targetUserId ? { ...p, role: "REJECTED" } : p
+  );
+
+  // approval kaydını sil
+  if (joinApprovals[eventId]) {
+    joinApprovals[eventId] = joinApprovals[eventId].filter(
+      (a) => a.userId !== targetUserId
+    );
+  }
+};
+
+/**
+ * 🔥 APPROVAL STATUS (UI için)
+ */
+export const getApprovalStatus = (eventId: string, userId: string) => {
+  const approvals = joinApprovals[eventId];
+  if (!approvals) return null;
+
+  const record = approvals.find((a) => a.userId === userId);
+  if (!record) return null;
+
+  return {
+    approvedCount: record.approvedBy.length,
+  };
+};
+
+/**
+ * 🔥 CHAT ACCESS CONTROL
+ */
+export const canAccessEventChat = (eventId: string, userId: string) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return false;
+
+  const participant = event.participants.find((p) => p.userId === userId);
+  if (!participant) return false;
+
+  return (
+    participant.role === "OWNER" ||
+    participant.role === "ADMIN" ||
+    participant.role === "MEMBER"
+  );
+};
+
+/**
+ * 🔥 CHAT ACCESS (KESİN KURAL)
+ * SADECE OWNER / ADMIN / MEMBER mesaj atabilir
+ * PENDING / REJECTED / BANNED → TAM ENGEL
+ */
+export const canSendEventMessage = (eventId: string, userId: string) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return false;
+
+  const participant = event.participants.find((p) => p.userId === userId);
+  if (!participant) return false;
+
+  if (
+    participant.role === "OWNER" ||
+    participant.role === "ADMIN" ||
+    participant.role === "MEMBER"
+  ) {
+    return true;
+  }
+
+  // 🔥 NET ENGEL
+  return false;
+};
+
+/**
+ * 🔥 YETKİ KONTROLÜ (OWNER / ADMIN)
+ */
+const isManager = (event: RoleSocialEvent, userId: string) => {
+  const p = event.participants.find((x) => x.userId === userId);
+  return p?.role === "OWNER" || p?.role === "ADMIN";
+};
+
+/**
+ * 🔥 KULLANICIYI ETKİNLİKTEN AT (KICK)
+ */
+export const kickParticipant = (
+  eventId: string,
+  managerId: string,
+  targetUserId: string
+) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return;
+
+  if (!isManager(event, managerId)) return;
+
+  // OWNER silinemez
+  const target = event.participants.find((p) => p.userId === targetUserId);
+  if (!target || target.role === "OWNER") return;
+
+  event.participants = event.participants.filter((p) => p.userId !== targetUserId);
+};
+
+/**
+ * 🔥 KULLANICIYI BANLA (CHAT + JOIN ENGEL)
+ */
+export const banParticipant = (
+  eventId: string,
+  managerId: string,
+  targetUserId: string
+) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return;
+
+  if (!isManager(event, managerId)) return;
+
+  event.participants = event.participants.map((p) =>
+    p.userId === targetUserId ? { ...p, role: "BANNED" } : p
+  );
+};
+
+/**
+ * 🔥 CHAT'TEN ENGELLE (sadece mesaj atamaz ama eventte kalır)
+ */
+export const muteParticipant = (
+  eventId: string,
+  managerId: string,
+  targetUserId: string
+) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return;
+
+  if (!isManager(event, managerId)) return;
+
+  event.participants = event.participants.map((p) =>
+    p.userId === targetUserId ? { ...p, role: "REJECTED" } : p
+  );
+};
+
+/**
+ * 🔥 ADD ADMIN (SADECE OWNER + MAX 2)
+ */
+export const addAdmin = (
+  eventId: string,
+  targetUserId: string,
+  actorUserId: string
+) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return { success: false, error: "EVENT_NOT_FOUND" as const };
+
+  const actorRole = getUserRole(event, actorUserId);
+
+  // ❗ sadece OWNER yetkili atayabilir
+  if (actorRole !== "OWNER") {
+    return { success: false, error: "NOT_ALLOWED" as const };
+  }
+
+  // ❗ max 2 admin
+  const adminCount = event.participants.filter((p) => p.role === "ADMIN").length;
+  if (adminCount >= 2) {
+    return { success: false, error: "ADMIN_LIMIT" as const };
+  }
+
+  // ❗ kullanıcı event içinde mi
+  const target = event.participants.find((p) => p.userId === targetUserId);
+  if (!target) {
+    return { success: false, error: "USER_NOT_IN_EVENT" as const };
+  }
+
+  // ❗ zaten admin mi
+  if (target.role === "ADMIN") {
+    return { success: false, error: "ALREADY_ADMIN" as const };
+  }
+
+  // ❗ OWNER admin yapılamaz (zaten en yüksek rol)
+  if (target.role === "OWNER") {
+    return { success: false, error: "INVALID_ROLE" as const };
+  }
+
+  // 🔥 ADMIN ATA
+  event.participants = event.participants.map((p) =>
+    p.userId === targetUserId ? { ...p, role: "ADMIN" } : p
+  );
+
+  return { success: true as const };
+};
+
+/**
+ * 🔥 REMOVE ADMIN (geri MEMBER yap)
+ */
+export const removeAdmin = (
+  eventId: string,
+  targetUserId: string,
+  actorUserId: string
+) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return;
+
+  const actorRole = getUserRole(event, actorUserId);
+  if (actorRole !== "OWNER") return;
+
+  event.participants = event.participants.map((p) =>
+    p.userId === targetUserId && p.role === "ADMIN"
+      ? { ...p, role: "MEMBER" }
+      : p
+  );
+};
+
 export const createEvent = (
-  event: SocialEvent & { time: string; date: string }
+  event: RoleSocialEvent & { time: string; date: string }
 ) => {
   if (!isValidDate(event.date)) {
     throw new Error("INVALID_DATE");

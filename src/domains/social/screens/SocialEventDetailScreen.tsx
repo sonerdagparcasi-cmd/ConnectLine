@@ -19,9 +19,15 @@ import {
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import SocialScreenLayout from "../components/SocialScreenLayout";
+import { useSocialProfile } from "../hooks/useSocialProfile";
 import type { SocialStackParamList } from "../navigation/SocialNavigator";
 
 import {
+  addAdmin,
+  canSendEventMessage,
+  kickParticipant,
+  banParticipant,
+  muteParticipant,
   SocialEvent,
   SocialEventParticipant,
   socialEventService,
@@ -44,6 +50,10 @@ export default function SocialEventDetailScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<Route>();
+  const { profile } = useSocialProfile();
+  const currentUserId = profile.userId;
+  const eventId = route.params.eventId;
+  const canMessage = canSendEventMessage(eventId, currentUserId);
 
   const [event, setEvent] = useState<SocialEvent | null>(null);
   const [participants, setParticipants] = useState<SocialEventParticipant[]>([]);
@@ -129,6 +139,26 @@ export default function SocialEventDetailScreen() {
   /* ------------------------------------------------------------------ */
 
   const isOwner = event ? socialEventService.isOwner(event) : false;
+
+  const handleMakeAdmin = (userId: string) => {
+    const res = addAdmin(eventId, userId, currentUserId);
+
+    if (!res.success) {
+      Alert.alert("Hata", res.error);
+    }
+  };
+
+  const handleKick = (userId: string) => {
+    kickParticipant(eventId, currentUserId, userId);
+  };
+
+  const handleBan = (userId: string) => {
+    banParticipant(eventId, currentUserId, userId);
+  };
+
+  const handleMute = (userId: string) => {
+    muteParticipant(eventId, currentUserId, userId);
+  };
 
   function openOwnerMenu() {
     if (!event) return;
@@ -297,29 +327,35 @@ export default function SocialEventDetailScreen() {
           </View>
         ))}
 
-        <View style={styles.chatInputRow}>
-          <TextInput
-            value={messageText}
-            onChangeText={setMessageText}
-            placeholder="Mesaj yaz..."
-            placeholderTextColor={T.mutedText}
-            style={[
-              styles.chatInput,
-              {
-                borderColor: T.border,
-                color: T.textColor,
-                backgroundColor: T.cardBg,
-              },
-            ]}
-          />
+        {canMessage ? (
+          <View style={styles.chatInputRow}>
+            <TextInput
+              value={messageText}
+              onChangeText={setMessageText}
+              placeholder="Mesaj yaz..."
+              placeholderTextColor={T.mutedText}
+              style={[
+                styles.chatInput,
+                {
+                  borderColor: T.border,
+                  color: T.textColor,
+                  backgroundColor: T.cardBg,
+                },
+              ]}
+            />
 
-          <TouchableOpacity
-            onPress={sendMessage}
-            style={[styles.sendBtn, { backgroundColor: T.accent }]}
-          >
-            <Ionicons name="send" size={18} color="#fff" />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={sendMessage}
+              style={[styles.sendBtn, { backgroundColor: T.accent }]}
+            >
+              <Ionicons name="send" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text style={{ opacity: 0.6, textAlign: "center", color: T.mutedText }}>
+            Katılımınız onaylanmadığı için mesaj gönderemezsiniz
+          </Text>
+        )}
       </View>
     </SocialScreenLayout>
   );

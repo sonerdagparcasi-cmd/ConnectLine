@@ -63,6 +63,36 @@ const getTodayDate = () => {
   return `${year}-${month}-${day}`;
 };
 
+// 🔥 CURRENT TIME (HH:mm)
+const getCurrentTime = () => {
+  const d = new Date();
+
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+
+  return `${hours}:${minutes}`;
+};
+
+// 🔥 DEVICE LOCALE → COUNTRY / CITY
+const getUserLocationLabel = () => {
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale; // örn: tr-TR
+    const parts = locale.split("-");
+
+    const country = parts[1] || "TR";
+
+    // şehir bilgisi yoksa fallback
+    return `Türkiye / İstanbul`.replace("TR", country);
+  } catch {
+    return "Türkiye / İstanbul";
+  }
+};
+
+// 🔥 CLEAN INPUT (harf + boşluk + /)
+const formatLocation = (value: string) => {
+  return value.replace(/[^a-zA-ZçÇğĞıİöÖşŞüÜ\s/]/g, "");
+};
+
 export default function SocialCreateEventScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<any>();
@@ -76,8 +106,8 @@ export default function SocialCreateEventScreen() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(getTodayDate());
-  const [time, setTime] = useState("");
-  const [location, setLocation] = useState("");
+  const [time, setTime] = useState(getCurrentTime());
+  const [location, setLocation] = useState(getUserLocationLabel());
 
   /* ------------------------------------------------------------------ */
   /* LOAD EVENT (EDIT MODE)                                             */
@@ -137,6 +167,8 @@ export default function SocialCreateEventScreen() {
   async function submit() {
     const cleanTitle = title.trim();
     const finalDate = date || getTodayDate();
+    const finalTime = time || getCurrentTime();
+    const finalLocation = location || getUserLocationLabel();
 
     if (!cleanTitle) {
       Alert.alert("Başlık gerekli");
@@ -148,7 +180,7 @@ export default function SocialCreateEventScreen() {
       return;
     }
 
-    if (!isValidTime(time)) {
+    if (!isValidTime(finalTime)) {
       Alert.alert("Geçersiz saat", "Lütfen HH:mm formatında girin");
       return;
     }
@@ -159,8 +191,8 @@ export default function SocialCreateEventScreen() {
           title: cleanTitle,
           description,
           date: finalDate,
-          time,
-          location,
+          time: finalTime,
+          location: finalLocation,
           coverImage,
         });
 
@@ -170,8 +202,8 @@ export default function SocialCreateEventScreen() {
           title: cleanTitle,
           description,
           date: finalDate,
-          time,
-          location,
+          time: finalTime,
+          location: finalLocation,
           coverImage,
         });
 
@@ -212,6 +244,20 @@ export default function SocialCreateEventScreen() {
   const handleDateBlur = () => {
     if (!date) {
       setDate(getTodayDate());
+    }
+  };
+
+  // 🔥 EMPTY RESET (UX)
+  const handleTimeBlur = () => {
+    if (!time) {
+      setTime(getCurrentTime());
+    }
+  };
+
+  // 🔥 EMPTY RESET
+  const handleLocationBlur = () => {
+    if (!location) {
+      setLocation(getUserLocationLabel());
     }
   };
 
@@ -317,10 +363,13 @@ export default function SocialCreateEventScreen() {
           value={time}
           onChangeText={(text) => {
             const formatted = formatTime(text);
-            setTime(formatted);
+            if (formatted.length <= 5) {
+              setTime(formatted);
+            }
           }}
-          placeholder="19:00"
+          placeholder={getCurrentTime()}
           keyboardType="numeric"
+          onBlur={handleTimeBlur}
           placeholderTextColor={T.mutedText}
           style={[
             styles.input,
@@ -338,8 +387,12 @@ export default function SocialCreateEventScreen() {
 
         <TextInput
           value={location}
-          onChangeText={setLocation}
-          placeholder="Ülke / Şehir"
+          onChangeText={(text) => {
+            const formatted = formatLocation(text);
+            setLocation(formatted);
+          }}
+          placeholder={getUserLocationLabel()}
+          onBlur={handleLocationBlur}
           placeholderTextColor={T.mutedText}
           style={[
             styles.input,
