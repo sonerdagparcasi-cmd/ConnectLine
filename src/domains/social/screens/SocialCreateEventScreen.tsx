@@ -53,6 +53,16 @@ const formatDate = (value: string) => {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
 };
 
+const getTodayDate = () => {
+  const d = new Date();
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
 export default function SocialCreateEventScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<any>();
@@ -65,7 +75,7 @@ export default function SocialCreateEventScreen() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(getTodayDate());
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
 
@@ -126,13 +136,14 @@ export default function SocialCreateEventScreen() {
 
   async function submit() {
     const cleanTitle = title.trim();
+    const finalDate = date || getTodayDate();
 
     if (!cleanTitle) {
       Alert.alert("Başlık gerekli");
       return;
     }
 
-    if (!isValidDate(date)) {
+    if (!isValidDate(finalDate)) {
       Alert.alert("Geçersiz tarih", "Lütfen YYYY-MM-DD formatında girin");
       return;
     }
@@ -147,7 +158,7 @@ export default function SocialCreateEventScreen() {
         await socialEventService.updateEvent(editingEventId as string, {
           title: cleanTitle,
           description,
-          date,
+          date: finalDate,
           time,
           location,
           coverImage,
@@ -158,7 +169,7 @@ export default function SocialCreateEventScreen() {
         await socialEventService.createEvent({
           title: cleanTitle,
           description,
-          date,
+          date: finalDate,
           time,
           location,
           coverImage,
@@ -197,6 +208,12 @@ export default function SocialCreateEventScreen() {
       Alert.alert("Hata", "İşlem gerçekleştirilemedi");
     }
   }
+
+  const handleDateBlur = () => {
+    if (!date) {
+      setDate(getTodayDate());
+    }
+  };
 
   /* ------------------------------------------------------------------ */
 
@@ -278,8 +295,9 @@ export default function SocialCreateEventScreen() {
             const formatted = formatDate(text);
             setDate(formatted);
           }}
-          placeholder="YYYY-MM-DD"
+          placeholder={getTodayDate()}
           keyboardType="numeric"
+          onBlur={handleDateBlur}
           placeholderTextColor={T.mutedText}
           style={[
             styles.input,
