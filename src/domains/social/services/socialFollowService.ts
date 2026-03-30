@@ -240,12 +240,23 @@ export function getFollowing(userId: string): string[] {
   return socialFollowService.getFollowing(userId);
 }
 
-export function getFollowingUsers() {
+export function getFollowingUsers(_userId?: string) {
   const users = getAllUsers();
 
   const followingIds = new Set(socialFollowService.getFollowing(CURRENT_USER_ID));
   return users.filter((u) => followingIds.has(u.userId));
 }
+
+const mockFollowing = [
+  { id: "user_1", name: "Ahmet" },
+  { id: "user_2", name: "Mehmet" },
+  { id: "user_3", name: "Ayşe" },
+  { id: "user_4", name: "Fatma" },
+];
+
+export const getFollowingUsersForAdminInvite = (_userId: string) => {
+  return mockFollowing;
+};
 
 /* ------------------------------------------------------------------ */
 /* FOLLOWERS                                                          */

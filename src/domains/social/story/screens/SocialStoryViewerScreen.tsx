@@ -25,6 +25,7 @@ import { switchTestUser, useSocialProfile } from "../../hooks/useSocialProfile";
 import { sendSocialMessage } from "../../services/socialMessageService";
 import { useAppTheme } from "../../../../shared/theme/appTheme";
 import { getCurrentSocialUserId } from "../../services/socialFollowService";
+import { getEventById } from "../../services/socialEventService";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
 import {
   addReaction,
@@ -412,6 +413,9 @@ export default function SocialStoryViewerScreen() {
   }
 
   const media = (story as any)?.media;
+  const linkedEvent = (story as any)?.eventId
+    ? getEventById((story as any).eventId)
+    : null;
   const isVideo = media?.type === "video";
   const mediaUri = media?.uri ?? null;
 
@@ -583,6 +587,27 @@ export default function SocialStoryViewerScreen() {
           );
         })()}
       </Animated.View>
+
+      {linkedEvent && (
+        <TouchableOpacity
+          onPress={() =>
+            navigation.navigate("SocialEventDetail", {
+              eventId: linkedEvent.id,
+            })
+          }
+          style={{
+            position: "absolute",
+            bottom: 100,
+            alignSelf: "center",
+            backgroundColor: "#00bfff",
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 20,
+          }}
+        >
+          <Text style={{ color: "#fff" }}>Etkinliği Gör</Text>
+        </TouchableOpacity>
+      )}
 
       {isVideo && (
         <TouchableOpacity

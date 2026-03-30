@@ -4,7 +4,18 @@
 // - Event Cover Photo
 // - Event Invite System
 import { emitSocialEvent } from "./socialFeedStateService";
-import type { SocialEvent as RoleSocialEvent } from "../types/social.types";
+import type {
+  SocialEvent,
+  SocialEventParticipant as ModelParticipant,
+  SocialEventRole,
+} from "../types/social.types";
+
+export type Role = "OWNER" | "MEMBER";
+
+export interface Participant {
+  userId: string;
+  role: Role;
+}
 
 export type SocialEventParticipant = {
   userId: string;
@@ -32,7 +43,7 @@ export type SocialEventInvite = {
 
 /* ------------------------------------------------------------------ */
 
-export type SocialEvent = {
+export type UiSocialEvent = {
   id: string;
 
   title: string;
@@ -74,7 +85,7 @@ let mockInvites: SocialEventInvite[] = [];
 /* MOCK EVENTS                                                        */
 /* ------------------------------------------------------------------ */
 
-const mockEvents: SocialEvent[] = [
+const mockEvents: UiSocialEvent[] = [
   {
     id: "e1",
     title: "Topluluk Buluşması",
@@ -123,19 +134,59 @@ const mockEvents: SocialEvent[] = [
     isJoined: true,
   },
 ];
-let events: RoleSocialEvent[] = [];
+let events: SocialEvent[] = [];
+const normalizeParticipants = (event: SocialEvent): ModelParticipant[] => {
+  const safe = Array.isArray((event as any).participants)
+    ? ([...(event as any).participants] as ModelParticipant[])
+    : [];
+
+  const exists = safe.some((participant) => participant.userId === event.createdBy);
+
+  if (!exists && event.createdBy) {
+    safe.unshift({
+      userId: event.createdBy,
+      role: "OWNER",
+    });
+  }
+
+  return safe;
+};
+
+const normalizeEvent = (event: SocialEvent): SocialEvent => {
+  return {
+    ...event,
+    participants: normalizeParticipants(event),
+    createdAt: event.createdAt || Date.now(),
+  };
+};
+type EventInvite = {
+  id: string;
+  eventId: string;
+  fromUserId: string;
+  toUserId: string;
+  createdAt: number;
+  status: "PENDING" | "ACCEPTED" | "DECLINED";
+};
+let invites: EventInvite[] = [];
+type AdminInvite = {
+  eventId: string;
+  userId: string;
+  invitedBy: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED";
+};
+let adminInvites: AdminInvite[] = [];
 
 /* ------------------------------------------------------------------ */
 /* SERVICE                                                            */
 /* ------------------------------------------------------------------ */
 
 export const socialEventService = {
-  async getEvents(): Promise<SocialEvent[]> {
+  async getEvents(): Promise<UiSocialEvent[]> {
     return Promise.resolve([...mockEvents]);
   },
 
   /** Events where user is host or in participantList (for profile stats + Events tab) */
-  async getEventsByUser(userId: string): Promise<SocialEvent[]> {
+  async getEventsByUser(userId: string): Promise<UiSocialEvent[]> {
     const events = await this.getEvents();
     return events.filter(
       (e) =>
@@ -144,7 +195,7 @@ export const socialEventService = {
     );
   },
 
-  async getEventById(id: string): Promise<SocialEvent | null> {
+  async getEventById(id: string): Promise<UiSocialEvent | null> {
     return Promise.resolve(mockEvents.find((e) => e.id === id) ?? null);
   },
 
@@ -156,7 +207,7 @@ export const socialEventService = {
     location?: string;
     coverImage?: string;
   }) {
-    const newEvent: SocialEvent = {
+    const newEvent: UiSocialEvent = {
       id: `e_${Date.now()}`,
       title: payload.title,
       description: payload.description,
@@ -216,7 +267,7 @@ export const socialEventService = {
     mockEvents.splice(index, 1);
   },
 
-  isOwner(event: SocialEvent) {
+  isOwner(event: UiSocialEvent) {
     return event.hostId === CURRENT_USER.userId;
   },
 
@@ -349,7 +400,7 @@ export const isFutureDate = (value: string) => {
 /**
  * 🔥 GET ROLE
  */
-const getUserRole = (event: RoleSocialEvent, userId: string) => {
+const getUserRole = (event: SocialEvent, userId: string) => {
   return event.participants.find((p) => p.userId === userId)?.role;
 };
 
@@ -368,25 +419,25 @@ const joinApprovals: Record<string, JoinApproval[]> = {};
  * JOIN REQUEST (PENDING + approval başlat)
  */
 export const requestToJoin = (eventId: string, userId: string) => {
-  const event = events.find((e) => e.id === eventId);
-  if (!event) return;
+  const eventIndex = events.findIndex((item) => item.id === eventId);
+  if (eventIndex === -1) return;
 
-  const exists = event.participants.find((p) => p.userId === userId);
-  if (exists) return;
+  const event = normalizeEvent(events[eventIndex]);
+  if (event.createdBy === userId) {
+    return event;
+  }
+  const existing = event.participants.find((participant) => participant.userId === userId);
+
+  if (existing) {
+    return event;
+  }
 
   event.participants.push({
     userId,
     role: "PENDING",
   });
-
-  if (!joinApprovals[eventId]) {
-    joinApprovals[eventId] = [];
-  }
-
-  joinApprovals[eventId].push({
-    userId,
-    approvedBy: [],
-  });
+  events[eventIndex] = event;
+  return event;
 };
 
 /**
@@ -394,63 +445,49 @@ export const requestToJoin = (eventId: string, userId: string) => {
  */
 export const approveParticipant = (
   eventId: string,
-  targetUserId: string,
-  approverId: string
+  managerId: string,
+  targetUserId: string
 ) => {
-  const event = events.find((e) => e.id === eventId);
-  if (!event) return;
+  const eventIndex = events.findIndex((item) => item.id === eventId);
+  if (eventIndex === -1) return;
+  const event = normalizeEvent(events[eventIndex]);
 
-  const approver = event.participants.find((p) => p.userId === approverId);
-
-  // sadece OWNER / ADMIN onaylayabilir
-  if (!approver || (approver.role !== "OWNER" && approver.role !== "ADMIN")) {
-    return;
+  const manager = getMyRole(eventId, managerId);
+  if (manager !== "OWNER" && manager !== "ADMIN") {
+    return event;
   }
 
-  const approvals = joinApprovals[eventId];
-  if (!approvals) return;
-
-  const record = approvals.find((a) => a.userId === targetUserId);
-  if (!record) return;
-
-  // aynı kişi 2 kere onaylayamaz
-  if (record.approvedBy.includes(approverId)) return;
-
-  record.approvedBy.push(approverId);
-
-  /**
-   * 🔥 GEREKLİ ONAY SAYISI
-   * OWNER + ADMIN sayısı kadar
-   */
-  const requiredApprovals = event.participants.filter(
-    (p) => p.role === "OWNER" || p.role === "ADMIN"
-  ).length;
-
-  if (record.approvedBy.length >= requiredApprovals) {
-    // FULL APPROVED → MEMBER
-    event.participants = event.participants.map((p) =>
-      p.userId === targetUserId ? { ...p, role: "MEMBER" } : p
-    );
-  }
+  event.participants = event.participants.map((participant) =>
+    participant.userId === targetUserId
+      ? { ...participant, role: "MEMBER" }
+      : participant
+  );
+  events[eventIndex] = event;
+  return event;
 };
 
 /**
  * 🔥 REJECT (tek kişi yeterli)
  */
-export const rejectParticipant = (eventId: string, targetUserId: string) => {
-  const event = events.find((e) => e.id === eventId);
-  if (!event) return;
+export const rejectParticipant = (
+  eventId: string,
+  managerId: string,
+  targetUserId: string
+) => {
+  const eventIndex = events.findIndex((item) => item.id === eventId);
+  if (eventIndex === -1) return;
+  const event = normalizeEvent(events[eventIndex]);
 
-  event.participants = event.participants.map((p) =>
-    p.userId === targetUserId ? { ...p, role: "REJECTED" } : p
+  const manager = getMyRole(eventId, managerId);
+  if (manager !== "OWNER" && manager !== "ADMIN") return event;
+
+  event.participants = event.participants.map((participant) =>
+    participant.userId === targetUserId
+      ? { ...participant, role: "REJECTED" }
+      : participant
   );
-
-  // approval kaydını sil
-  if (joinApprovals[eventId]) {
-    joinApprovals[eventId] = joinApprovals[eventId].filter(
-      (a) => a.userId !== targetUserId
-    );
-  }
+  events[eventIndex] = event;
+  return event;
 };
 
 /**
@@ -491,86 +528,92 @@ export const canAccessEventChat = (eventId: string, userId: string) => {
  * PENDING / REJECTED / BANNED → TAM ENGEL
  */
 export const canSendEventMessage = (eventId: string, userId: string) => {
-  const event = events.find((e) => e.id === eventId);
-  if (!event) return false;
+  const role = getMyRole(eventId, userId);
+  if (role === "OWNER") return true;
+  return role === "ADMIN" || role === "MEMBER";
+};
 
-  const participant = event.participants.find((p) => p.userId === userId);
-  if (!participant) return false;
+export const canViewParticipants = (eventId: string, userId: string) => {
+  const role = getMyRole(eventId, userId);
+  return role === "OWNER" || role === "ADMIN" || role === "MEMBER";
+};
 
-  if (
-    participant.role === "OWNER" ||
-    participant.role === "ADMIN" ||
-    participant.role === "MEMBER"
-  ) {
-    return true;
-  }
-
-  // 🔥 NET ENGEL
-  return false;
+export const canManageEvent = (eventId: string, userId: string) => {
+  const role = getMyRole(eventId, userId);
+  return role === "OWNER" || role === "ADMIN";
 };
 
 /**
- * 🔥 YETKİ KONTROLÜ (OWNER / ADMIN)
- */
-const isManager = (event: RoleSocialEvent, userId: string) => {
-  const p = event.participants.find((x) => x.userId === userId);
-  return p?.role === "OWNER" || p?.role === "ADMIN";
-};
-
-/**
- * 🔥 KULLANICIYI ETKİNLİKTEN AT (KICK)
+ * 🔥 MANAGER KONTROL
  */
 export const kickParticipant = (
   eventId: string,
   managerId: string,
   targetUserId: string
 ) => {
-  const event = events.find((e) => e.id === eventId);
-  if (!event) return;
+  const eventIndex = events.findIndex((item) => item.id === eventId);
+  if (eventIndex === -1) return;
+  const event = normalizeEvent(events[eventIndex]);
+  const managerRole = getMyRole(eventId, managerId);
 
-  if (!isManager(event, managerId)) return;
+  if (managerRole !== "OWNER" && managerRole !== "ADMIN") return event;
+  if (targetUserId === event.createdBy) return event;
 
-  // OWNER silinemez
-  const target = event.participants.find((p) => p.userId === targetUserId);
-  if (!target || target.role === "OWNER") return;
-
-  event.participants = event.participants.filter((p) => p.userId !== targetUserId);
+  event.participants = event.participants.filter(
+    (participant) => participant.userId !== targetUserId
+  );
+  events[eventIndex] = event;
+  return event;
 };
 
 /**
- * 🔥 KULLANICIYI BANLA (CHAT + JOIN ENGEL)
+ * 🔥 BAN (katılım + chat engel)
  */
 export const banParticipant = (
   eventId: string,
   managerId: string,
   targetUserId: string
 ) => {
-  const event = events.find((e) => e.id === eventId);
-  if (!event) return;
+  const eventIndex = events.findIndex((item) => item.id === eventId);
+  if (eventIndex === -1) return;
+  const event = normalizeEvent(events[eventIndex]);
+  const managerRole = getMyRole(eventId, managerId);
 
-  if (!isManager(event, managerId)) return;
+  if (managerRole !== "OWNER" && managerRole !== "ADMIN") return event;
+  if (targetUserId === event.createdBy) return event;
 
-  event.participants = event.participants.map((p) =>
-    p.userId === targetUserId ? { ...p, role: "BANNED" } : p
+  event.participants = event.participants.map((participant) =>
+    participant.userId === targetUserId
+      ? { ...participant, role: "BANNED" }
+      : participant
   );
+  events[eventIndex] = event;
+  return event;
 };
 
 /**
- * 🔥 CHAT'TEN ENGELLE (sadece mesaj atamaz ama eventte kalır)
+ * 🔥 MUTE (sadece chat engel)
  */
 export const muteParticipant = (
   eventId: string,
   managerId: string,
   targetUserId: string
 ) => {
-  const event = events.find((e) => e.id === eventId);
-  if (!event) return;
+  const eventIndex = events.findIndex((item) => item.id === eventId);
+  if (eventIndex === -1) return;
+  const event = normalizeEvent(events[eventIndex]);
+  const managerRole = getMyRole(eventId, managerId);
 
-  if (!isManager(event, managerId)) return;
+  if (managerRole !== "OWNER" && managerRole !== "ADMIN") return event;
+  if (targetUserId === event.createdBy) return event;
 
-  event.participants = event.participants.map((p) =>
-    p.userId === targetUserId ? { ...p, role: "REJECTED" } : p
+  event.participants = event.participants.map((participant) =>
+    participant.userId === targetUserId
+      ? { ...participant, role: "REJECTED" }
+      : participant
   );
+  events[eventIndex] = event;
+  return event;
 };
 
 /**
@@ -643,20 +686,275 @@ export const removeAdmin = (
 };
 
 export const createEvent = (
-  event: RoleSocialEvent & { time: string; date: string }
+  event: Omit<SocialEvent, "participants" | "createdAt"> & {
+    admins?: string[];
+  }
 ) => {
-  if (!isValidDate(event.date)) {
-    throw new Error("INVALID_DATE");
+  const adminIds = Array.isArray(event.admins) ? event.admins.slice(0, 2) : [];
+
+  const participants: ModelParticipant[] = [
+    {
+      userId: event.createdBy,
+      role: "OWNER",
+    },
+    ...adminIds
+      .filter((userId) => userId && userId !== event.createdBy)
+      .map((userId) => ({
+        userId,
+        role: "ADMIN" as SocialEventRole,
+      })),
+  ];
+
+  const newEvent: SocialEvent = {
+    ...event,
+    participants,
+    createdAt: Date.now(),
+  };
+
+  events.unshift(newEvent);
+  return newEvent;
+};
+
+export const getEventById = (eventId: string) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return undefined;
+
+  const safeParticipants = Array.isArray(event.participants)
+    ? [...event.participants]
+    : [];
+
+  if (
+    event.createdBy &&
+    !safeParticipants.some((p) => p.userId === event.createdBy)
+  ) {
+    safeParticipants.unshift({
+      userId: event.createdBy,
+      role: "OWNER",
+    });
   }
 
-  if (!isValidTime(event.time)) {
-    throw new Error("INVALID_TIME");
-  }
+  return {
+    ...event,
+    participants: safeParticipants,
+  };
+};
 
-  if (!isFutureDate(event.date)) {
-    throw new Error("PAST_DATE");
-  }
+export const updateEvent = (
+  eventId: string,
+  payload: Partial<
+    Pick<SocialEvent, "title" | "description" | "date" | "time" | "location">
+  > & { coverImage?: string }
+) => {
+  const eventIndex = events.findIndex((item) => item.id === eventId);
+  if (eventIndex === -1) return;
 
-  events.unshift(event);
+  const event = events[eventIndex];
+  const updated: SocialEvent = {
+    ...event,
+    ...payload,
+  };
+
+  events[eventIndex] = normalizeEvent(updated);
+  return events[eventIndex];
+};
+
+export const joinEvent = (eventId: string, userId: string) => {
+  const event = events.find((e) => e.id === eventId);
+  if (!event) return;
+
+  const exists = event.participants.find((p) => p.userId === userId);
+  if (exists) return;
+
+  event.participants.push({
+    userId,
+    role: "MEMBER",
+  });
+
   return event;
+};
+
+export const leaveEvent = (eventId: string, userId: string) => {
+  const eventIndex = events.findIndex((item) => item.id === eventId);
+  if (eventIndex === -1) return;
+  const event = normalizeEvent(events[eventIndex]);
+
+  if (event.createdBy === userId) return event;
+
+  event.participants = event.participants.filter(
+    (participant) => participant.userId !== userId
+  );
+  events[eventIndex] = event;
+  return event;
+};
+
+export const getMyRole = (
+  eventId: string,
+  userId: string
+): SocialEventRole | null => {
+  const event = getEventById(eventId);
+  if (!event) return null;
+
+  if (event.createdBy === userId) return "OWNER";
+
+  return (
+    event.participants.find((participant) => participant.userId === userId)?.role ||
+    null
+  );
+};
+
+/**
+ * 🔥 EVENT SCORE (growth motoru)
+ */
+const calculateEventScore = (event: SocialEvent) => {
+  const participantCount = event.participants.length;
+
+  const recencyScore =
+    Date.now() - event.createdAt < 1000 * 60 * 60 * 24 ? 50 : 10;
+
+  const activityScore = participantCount * 5;
+
+  return recencyScore + activityScore;
+};
+
+/**
+ * 🔥 TRENDING EVENTS
+ */
+export const getTrendingEvents = () => {
+  return [...events]
+    .sort((a, b) => calculateEventScore(b) - calculateEventScore(a))
+    .slice(0, 10);
+};
+
+/**
+ * 🔥 DISCOVER EVENTS
+ */
+export const getDiscoverEvents = (userId: string) => {
+  return events
+    .filter((e) => {
+      const joined = e.participants.find((p) => p.userId === userId);
+      return !joined;
+    })
+    .sort((a, b) => calculateEventScore(b) - calculateEventScore(a));
+};
+
+export const getPersonalizedEvents = (userId: string) => {
+  return events
+    .map((event) => {
+      let score = calculateEventScore(event);
+
+      // Ayni sehir bonusu (mock; event modelinde location yoksa no-op)
+      if ((event as any).location?.includes?.("İstanbul")) score += 20;
+
+      const friendJoined = event.participants.some((p) =>
+        p.userId.startsWith("user_")
+      );
+
+      if (friendJoined) score += 30;
+
+      return { event, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((e) => e.event);
+};
+
+export const inviteAdmin = (
+  eventId: string,
+  managerId: string,
+  targetUserId: string
+) => {
+  adminInvites.push({
+    eventId,
+    userId: targetUserId,
+    invitedBy: managerId,
+    status: "PENDING",
+  });
+};
+
+export const acceptAdminInvite = (eventId: string, userId: string) => {
+  const event = getEventById(eventId);
+  if (!event) return;
+
+  adminInvites = adminInvites.map((i) =>
+    i.eventId === eventId && i.userId === userId
+      ? { ...i, status: "ACCEPTED" }
+      : i
+  );
+
+  const exists = event.participants.find((p) => p.userId === userId);
+  if (exists) {
+    event.participants = event.participants.map((p) =>
+      p.userId === userId ? { ...p, role: "ADMIN" } : p
+    );
+    return;
+  }
+
+  event.participants.push({
+    userId,
+    role: "ADMIN",
+  });
+};
+
+export const getMyAdminInvites = (userId: string) => {
+  return adminInvites.filter((i) => i.userId === userId && i.status === "PENDING");
+};
+
+/**
+ * 🔥 EVENT SHARE LINK
+ */
+export const generateEventLink = (eventId: string) => {
+  return `connectline://event/${eventId}`;
+};
+
+/**
+ * 🔥 DAVET GÖNDER
+ */
+export const sendEventInvite = (
+  eventId: string,
+  fromUserId: string,
+  toUserId: string
+) => {
+  invites.unshift({
+    id: Math.random().toString(),
+    eventId,
+    fromUserId,
+    toUserId,
+    createdAt: Date.now(),
+    status: "PENDING",
+  });
+};
+
+/**
+ * 🔥 DAVETLERİ GETİR
+ */
+export const getMyEventInvites = (userId: string) => {
+  return invites.filter((i) => i.toUserId === userId && i.status === "PENDING");
+};
+
+/**
+ * 🔥 DAVET KABUL
+ */
+export const acceptEventInvite = (inviteId: string) => {
+  const invite = invites.find((i) => i.id === inviteId);
+  if (!invite) return;
+
+  invite.status = "ACCEPTED";
+  requestToJoin(invite.eventId, invite.toUserId);
+};
+
+/**
+ * 🔥 DAVET RED
+ */
+export const declineEventInvite = (inviteId: string) => {
+  const invite = invites.find((i) => i.id === inviteId);
+  if (!invite) return;
+
+  invite.status = "DECLINED";
+};
+
+export const boostEventScore = (eventId: string) => {
+  const event = getEventById(eventId);
+  if (!event) return;
+
+  const inviteCount = invites.filter((i) => i.eventId === eventId).length;
+  return inviteCount * 10;
 };

@@ -20,6 +20,8 @@ import {
 import * as ImagePicker from "expo-image-picker";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
+import { useSocialProfile } from "../hooks/useSocialProfile";
+import { getFollowingUsersForAdminInvite } from "../services/socialFollowService";
 
 import SocialScreenLayout from "../components/SocialScreenLayout";
 import {
@@ -97,6 +99,8 @@ export default function SocialCreateEventScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<any>();
   const route = useRoute<Route>();
+  const { profile } = useSocialProfile();
+  const currentUserId = profile.userId;
 
   const editingEventId = route.params?.editingEventId ?? null;
   const isEdit = Boolean(editingEventId);
@@ -108,6 +112,9 @@ export default function SocialCreateEventScreen() {
   const [date, setDate] = useState(getTodayDate());
   const [time, setTime] = useState(getCurrentTime());
   const [location, setLocation] = useState(getUserLocationLabel());
+  const [admins, setAdmins] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
 
   /* ------------------------------------------------------------------ */
   /* LOAD EVENT (EDIT MODE)                                             */
@@ -144,6 +151,11 @@ export default function SocialCreateEventScreen() {
       mounted = false;
     };
   }, [editingEventId]);
+
+  useEffect(() => {
+    const list = getFollowingUsersForAdminInvite(currentUserId);
+    setUsers(list);
+  }, [currentUserId]);
 
   /* ------------------------------------------------------------------ */
   /* PICK COVER                                                         */
@@ -208,30 +220,7 @@ export default function SocialCreateEventScreen() {
         });
 
         Alert.alert("Başarılı", "Etkinlik oluşturuldu");
-        // List UI'nin otomatik refresh alması için önce geri dön, sonra önceki route'u
-        // yeni key ile tekrar mount ettir.
-        const navState = navigation.getState?.();
-        const routes = navState?.routes as
-          | Array<{ name?: string; key?: string; params?: unknown }>
-          | undefined;
-        const prevRoute = routes?.[routes.length - 2];
-        const prevName = prevRoute?.name;
-        const prevParams = prevRoute?.params;
-
         navigation.goBack();
-        if (prevName) {
-          setTimeout(() => {
-            try {
-              navigation.navigate({
-                name: prevName,
-                params: prevParams as any,
-                key: `${prevName}_${Date.now()}`,
-              });
-            } catch {
-              // Fallback: sadece geri dön.
-            }
-          }, 0);
-        }
         return;
       }
 
@@ -260,6 +249,21 @@ export default function SocialCreateEventScreen() {
       setLocation(getUserLocationLabel());
     }
   };
+
+  const toggleAdmin = (userId: string) => {
+    if (admins.includes(userId)) {
+      setAdmins((prev) => prev.filter((id) => id !== userId));
+      return;
+    }
+
+    if (admins.length >= 2) return; // 🔥 max 2
+
+    setAdmins((prev) => [...prev, userId]);
+  };
+
+  const filteredUsers = users.filter((u) =>
+    u.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   /* ------------------------------------------------------------------ */
 
@@ -403,6 +407,51 @@ export default function SocialCreateEventScreen() {
             },
           ]}
         />
+
+        <View style={{ marginTop: 20 }}>
+          <Text style={{ fontWeight: "bold", marginBottom: 10, color: T.textColor }}>
+            Yetkili Ekle (max 2)
+          </Text>
+
+          <TextInput
+            placeholder="Kullanıcı ara..."
+            value={search}
+            onChangeText={setSearch}
+            placeholderTextColor={T.mutedText}
+            style={{
+              padding: 10,
+              borderRadius: 10,
+              backgroundColor: "#111",
+              color: "#fff",
+              marginBottom: 10,
+            }}
+          />
+
+          {filteredUsers.map((user) => {
+            const selected = admins.includes(user.id);
+
+            return (
+              <TouchableOpacity
+                key={user.id}
+                onPress={() => toggleAdmin(user.id)}
+                style={{
+                  padding: 10,
+                  marginBottom: 8,
+                  borderRadius: 10,
+                  backgroundColor: selected ? "#1834ae" : "#111",
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text style={{ color: "#fff" }}>{user.name}</Text>
+
+                {selected && (
+                  <Text style={{ color: "#00bfff", fontSize: 12 }}>ADMIN</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         {/* BUTTON */}
 

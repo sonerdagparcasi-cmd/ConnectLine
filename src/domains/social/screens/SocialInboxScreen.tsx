@@ -1,17 +1,24 @@
 import { useEffect, useState } from "react";
-import { View, Text, FlatList, TouchableOpacity, Image } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, Image, Button } from "react-native";
 import { t } from "../../../shared/i18n/t";
 import { useAppTheme } from "@/core/theme/useAppTheme";
 import { socialMessageService } from "../services/socialMessageService";
 import { useSocialProfile } from "../hooks/useSocialProfile";
 import { useNavigation } from "@react-navigation/native";
 import { getUserDisplay } from "../story/services/socialStoryStateService";
+import {
+  acceptEventInvite,
+  declineEventInvite,
+  getMyEventInvites,
+} from "../services/socialEventService";
 
 export default function SocialInboxScreen() {
   const { profile } = useSocialProfile();
   const { colors } = useAppTheme();
   const navigation = useNavigation<any>();
   const [list, setList] = useState(() => socialMessageService.getConversations());
+  const currentUserId = profile.userId;
+  const [invites, setInvites] = useState<any[]>([]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -20,6 +27,10 @@ export default function SocialInboxScreen() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    setInvites(getMyEventInvites(currentUserId));
+  }, [currentUserId]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, padding: 16 }}>
@@ -130,6 +141,42 @@ export default function SocialInboxScreen() {
           );
         }}
       />
+
+      <View style={{ marginTop: 20 }}>
+        <Text style={{ fontWeight: "bold", color: colors.text }}>Etkinlik Davetleri</Text>
+
+        {invites.map((invite) => (
+          <View
+            key={invite.id}
+            style={{
+              padding: 12,
+              marginTop: 10,
+              backgroundColor: "#111",
+              borderRadius: 10,
+            }}
+          >
+            <Text style={{ color: "#fff", marginBottom: 8 }}>Etkinliğe davet edildin</Text>
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Button
+                title="Kabul"
+                onPress={() => {
+                  acceptEventInvite(invite.id);
+                  setInvites(getMyEventInvites(currentUserId));
+                }}
+              />
+
+              <Button
+                title="Reddet"
+                onPress={() => {
+                  declineEventInvite(invite.id);
+                  setInvites(getMyEventInvites(currentUserId));
+                }}
+              />
+            </View>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }

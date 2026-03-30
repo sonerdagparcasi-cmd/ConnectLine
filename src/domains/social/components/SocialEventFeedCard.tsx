@@ -69,12 +69,13 @@ export default function SocialEventFeedCard({ post }: any) {
           {e.date} · {e.location}
         </Text>
 
+        <Text style={{ fontSize: 10, color: "#00bfff" }}>🔥 Trend</Text>
+
         {/* PARTICIPANTS */}
 
         <View style={styles.bottomRow}>
-
-          <Text style={{ color: T.mutedText }}>
-            👥 {e.participantCount ?? 0} katılımcı
+          <Text style={{ fontSize: 12, opacity: 0.6, color: T.mutedText }}>
+            {(e.participants?.length ?? e.participantCount ?? 0)} kişi katıldı
           </Text>
 
           {e.joinedByMe && (

@@ -145,7 +145,6 @@ export default function SocialProfileContainerScreen() {
         : (["#f1f0f0", "#00bfff"] as const),
     [T.isDark]
   );
-
   const handleOwnerAction = useCallback(
     (id: string) => {
       if (id === "editProfile") navigation.navigate("SocialHome");
@@ -296,6 +295,7 @@ export default function SocialProfileContainerScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+
             </View>
           </View>
         </View>

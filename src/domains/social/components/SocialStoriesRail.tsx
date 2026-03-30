@@ -14,6 +14,7 @@ import {
 import { useAppTheme } from "../../../shared/theme/appTheme";
 import { useSocialProfile } from "../hooks/useSocialProfile";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
+import { getStoriesWithPriority } from "../services/socialStoryService";
 import { getStoryMeta } from "../story/services/socialStoryStateService";
 import StoryAvatar from "../story/ui/StoryAvatar";
 import type { SocialStory } from "../types/social.types";
@@ -51,7 +52,10 @@ export default function SocialStoriesRail({
   const { profile } = useSocialProfile();
 
   const groups = useMemo(
-    () => groupStoriesByUser(stories, profile.userId),
+    () => {
+      const prioritized = stories.length ? stories : (getStoriesWithPriority() as any);
+      return groupStoriesByUser(prioritized, profile.userId);
+    },
     [stories, profile.userId]
   );
 

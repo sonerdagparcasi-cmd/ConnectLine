@@ -3,8 +3,8 @@
 // + Etkinlik oluştur butonu eklendi
 
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useAppTheme } from "../../../shared/theme/appTheme";
@@ -13,28 +13,21 @@ import { SocialEvent, socialEventService } from "../services/socialEventService"
 export default function SocialEventsScreen() {
   const T = useAppTheme();
   const navigation = useNavigation<any>();
-
   const [events, setEvents] = useState<SocialEvent[]>([]);
 
-  /* ------------------------------------------------------------------ */
-  /* LOAD EVENTS (UI-ONLY)                                              */
-  /* ------------------------------------------------------------------ */
-
-  useEffect(() => {
+  const loadEvents = useCallback(() => {
     socialEventService.getEvents().then(setEvents);
   }, []);
 
-  /* ------------------------------------------------------------------ */
-  /* CREATE EVENT                                                       */
-  /* ------------------------------------------------------------------ */
+  useFocusEffect(
+    useCallback(() => {
+      loadEvents();
+    }, [loadEvents])
+  );
 
   function goCreateEvent() {
     navigation.navigate("SocialCreateEvent");
   }
-
-  /* ------------------------------------------------------------------ */
-  /* EMPTY STATE                                                        */
-  /* ------------------------------------------------------------------ */
 
   if (!events.length) {
     return (
@@ -54,14 +47,8 @@ export default function SocialEventsScreen() {
     );
   }
 
-  /* ------------------------------------------------------------------ */
-  /* RENDER                                                             */
-  /* ------------------------------------------------------------------ */
-
   return (
     <View style={[styles.root, { backgroundColor: T.backgroundColor }]}>
-      {/* CREATE EVENT BUTTON */}
-
       <TouchableOpacity
         onPress={goCreateEvent}
         style={[styles.createBtn, { backgroundColor: T.accent }]}
@@ -69,8 +56,6 @@ export default function SocialEventsScreen() {
         <Ionicons name="add" size={18} color="#fff" />
         <Text style={styles.createText}>Etkinlik Oluştur</Text>
       </TouchableOpacity>
-
-      {/* EVENT LIST */}
 
       {events.map((event) => (
         <TouchableOpacity
@@ -102,10 +87,6 @@ export default function SocialEventsScreen() {
     </View>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* STYLES                                                             */
-/* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
   root: {

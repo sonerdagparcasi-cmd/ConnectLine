@@ -147,7 +147,11 @@ export type SocialStory = {
   username: string;
   userAvatarUri?: string | null;
 
-  media: SocialMediaItem | null;
+  media?: SocialMediaItem | null;
+  /** Lightweight story service compatibility */
+  mediaUri?: string;
+  /** Lightweight story text compatibility */
+  text?: string;
   mediaType?: SocialStoryMediaType;
   textNote?: string;
   caption?: string;
@@ -156,8 +160,11 @@ export type SocialStory = {
 
   visibility: SocialVisibility;
   audience?: SocialStoryAudience;
-  createdAt: string;
+  createdAt: string | number;
   expiresAt?: string;
+
+  // Event deeplink for story shares
+  eventId?: string;
 
   /** Event reference for event story */
   eventRef?: {
@@ -186,28 +193,26 @@ export type SocialStory = {
 /* EVENTS                                                                     */
 /* -------------------------------------------------------------------------- */
 
-export type SocialEventInviteStatus = "pending" | "accepted" | "rejected";
+export type SocialEventRole =
+  | "OWNER"
+  | "ADMIN"
+  | "MEMBER"
+  | "PENDING"
+  | "REJECTED"
+  | "BANNED";
 
-export type SocialEvent = {
+export interface SocialEventParticipant {
+  userId: string;
+  role: SocialEventRole;
+}
+
+export interface SocialEvent {
   id: string;
-
-  ownerUserId: string;
-
   title: string;
-  description: string;
-  dateISO: string;
-
-  visibility: SocialVisibility;
-
-  participantCount: number;
-  joinedByMe: boolean;
-
-  invites?: Array<{
-    userId: string;
-    username: string;
-    status: SocialEventInviteStatus;
-  }>;
-};
+  createdBy: string;
+  participants: SocialEventParticipant[];
+  createdAt: number;
+}
 
 /* -------------------------------------------------------------------------- */
 /* FOLLOW SYSTEM (ADIM 1 – NEW TYPES)                                        */

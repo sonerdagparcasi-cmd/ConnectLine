@@ -11,6 +11,7 @@ type Props = {
   isMe?: boolean;
   focused?: boolean;
   labelForMe?: string;
+  story?: { eventId?: string };
 };
 
 export default function SocialStoryAvatar({
@@ -20,6 +21,7 @@ export default function SocialStoryAvatar({
   isMe,
   focused,
   labelForMe,
+  story,
 }: Props) {
   const T = useAppTheme();
 
@@ -47,6 +49,9 @@ export default function SocialStoryAvatar({
         <Text style={styles.name} numberOfLines={1}>
           {isMe ? labelForMe ?? "Me" : name ?? "User"}
         </Text>
+        {story?.eventId && (
+          <Text style={{ fontSize: 10, color: "#00bfff" }}>📅 Etkinlik</Text>
+        )}
       </View>
     </View>
   );
