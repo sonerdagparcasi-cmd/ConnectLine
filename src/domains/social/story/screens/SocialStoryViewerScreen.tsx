@@ -4,6 +4,7 @@ import { ResizeMode, Video } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -47,6 +48,7 @@ import {
   getStoryReplyCount,
   subscribeStoryReplies,
 } from "../../services/socialStoryReplyService";
+import { createHighlight } from "../services/socialHighlightService";
 
 const STORY_DURATION_MS = 6000;
 const SWIPE_THRESHOLD = 60;
@@ -842,6 +844,21 @@ export default function SocialStoryViewerScreen() {
 
       {menuOpen && (
         <View style={styles.menuOverlay}>
+          <TouchableOpacity
+            onPress={() => {
+              createHighlight({
+                userId: currentUserId!,
+                title: "Highlight",
+                storyIds: [current?.id],
+                coverUri: current?.media?.uri ?? null,
+              });
+              setMenuOpen(false);
+              Alert.alert("Öne çıkarıldı");
+            }}
+          >
+            <Text style={styles.menuItem}>Öne Çıkar</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => {
               setMenuOpen(false);
