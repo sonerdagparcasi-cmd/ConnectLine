@@ -22,7 +22,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { t } from "../../../../shared/i18n/t";
 
-import { switchTestUser, useSocialProfile } from "../../hooks/useSocialProfile";
+import { useSocialProfile } from "../../hooks/useSocialProfile";
 import { sendSocialMessage } from "../../services/socialMessageService";
 import { useAppTheme } from "../../../../shared/theme/appTheme";
 import { getCurrentSocialUserId } from "../../services/socialFollowService";
@@ -456,18 +456,6 @@ export default function SocialStoryViewerScreen() {
         <Ionicons name="mail-outline" size={22} color="#fff" />
       </TouchableOpacity>
 
-      {__DEV__ ? (
-        <TouchableOpacity
-          style={[styles.devSwitchBtn, { top: Math.max(insets.top, 6) }]}
-          onPress={() => {
-            switchTestUser();
-            forceUpdate((x) => x + 1);
-          }}
-        >
-          <Text style={styles.devSwitchText}>Kullanıcı</Text>
-        </TouchableOpacity>
-      ) : null}
-
       <View style={styles.headerContainer}>
         <View style={styles.headerContent}>
           <View style={styles.progressRow}>
@@ -656,7 +644,7 @@ export default function SocialStoryViewerScreen() {
         </TouchableOpacity>
       )}
 
-      {keyboardHeight === 0 && (
+      {!isOwner && keyboardHeight === 0 && (
         <View
           style={{
             position: "absolute",
@@ -677,13 +665,13 @@ export default function SocialStoryViewerScreen() {
               onLongPress={() => setShowPicker(true)}
               activeOpacity={0.85}
             >
-              <Text style={{ fontSize: 22 }}>{emoji === "💙" ? "💙" : emoji}</Text>
+              <Text style={{ fontSize: 22 }}>{emoji}</Text>
             </TouchableOpacity>
           ))}
         </View>
       )}
 
-      {showPicker && (
+      {!isOwner && showPicker && (
         <View
           style={{
             position: "absolute",
@@ -712,7 +700,7 @@ export default function SocialStoryViewerScreen() {
         </View>
       )}
 
-      {flyingEmoji && (
+      {!isOwner && flyingEmoji && (
         <Animated.View
           pointerEvents="none"
           style={{
@@ -869,7 +857,7 @@ export default function SocialStoryViewerScreen() {
         </View>
       )}
 
-      {menuOpen && (
+      {isOwner && menuOpen && (
         <View style={styles.menuOverlay}>
           <TouchableOpacity
             onPress={() => {
@@ -1055,22 +1043,6 @@ const styles = StyleSheet.create({
     elevation: 999,
     padding: 8,
   },
-  devSwitchBtn: {
-    position: "absolute",
-    left: 10,
-    zIndex: 999,
-    elevation: 999,
-    backgroundColor: "rgba(220,38,38,0.45)",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  devSwitchText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
   headerContainer: {
     position: "absolute",
     top: 0,
