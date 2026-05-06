@@ -448,14 +448,6 @@ export default function SocialStoryViewerScreen() {
         <Ionicons name="close" size={24} color="#fff" />
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.headerIconBtn, { top: Math.max(insets.top, 6), right: 52 }]}
-        onPress={() => navigation.navigate("SocialInbox")}
-        hitSlop={12}
-      >
-        <Ionicons name="mail-outline" size={22} color="#fff" />
-      </TouchableOpacity>
-
       <View style={styles.headerContainer}>
         <View style={styles.headerContent}>
           <View style={styles.progressRow}>
@@ -1037,12 +1029,6 @@ const styles = StyleSheet.create({
     padding: 8,
   },
 
-  headerIconBtn: {
-    position: "absolute",
-    zIndex: 999,
-    elevation: 999,
-    padding: 8,
-  },
   headerContainer: {
     position: "absolute",
     top: 0,
