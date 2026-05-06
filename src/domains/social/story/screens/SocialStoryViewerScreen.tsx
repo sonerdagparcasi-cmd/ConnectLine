@@ -495,7 +495,15 @@ export default function SocialStoryViewerScreen() {
           </View>
 
           <View style={styles.headerRow}>
-            <View style={styles.headerLeft}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.headerLeft}
+              onPress={() => {
+                if (group.userId !== currentUserId) {
+                  navigation.navigate("SocialProfileContainer", { userId: group.userId });
+                }
+              }}
+            >
               {headerAvatarUri ? (
                 <Image source={{ uri: headerAvatarUri }} style={styles.headerAvatar} />
               ) : (
@@ -513,7 +521,7 @@ export default function SocialStoryViewerScreen() {
                   </Text>
                 ) : null}
               </View>
-            </View>
+            </TouchableOpacity>
 
             {isOwner && (
               <TouchableOpacity
