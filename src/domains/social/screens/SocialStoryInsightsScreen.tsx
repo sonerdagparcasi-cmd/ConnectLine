@@ -21,6 +21,7 @@ import {
   getStoryViewers,
 } from "../services/socialStoryStateService";
 import { getStoryReplies } from "../services/socialStoryReplyService";
+import { getCurrentSocialUserId } from "../services/socialFollowService";
 
 type Route = RouteProp<SocialStackParamList, "SocialStoryInsights">;
 
@@ -34,7 +35,8 @@ export default function SocialStoryInsightsScreen() {
     () => getStories().find((s) => s.id === storyId),
     [storyId]
   );
-  const isOwner = story?.userId === "u1";
+  const currentUserId = getCurrentSocialUserId();
+  const isOwner = story?.userId === currentUserId;
 
   const viewers = useMemo(() => getStoryViewers(storyId), [storyId]);
   const replies = useMemo(() => getStoryReplies(storyId), [storyId]);
