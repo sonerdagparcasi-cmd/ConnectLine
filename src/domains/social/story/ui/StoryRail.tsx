@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, FlatList, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { Animated, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useSocialProfile } from "../../hooks/useSocialProfile";
 import { groupStoriesByUser } from "../services/socialStoryGroupService";
@@ -20,6 +22,7 @@ export default function StoryRail({ stories }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [storyRev, setStoryRev] = useState(0);
   const { profile } = useSocialProfile();
+  const navigation = useNavigation<any>();
 
   useEffect(() => subscribeStories(() => setStoryRev((n) => n + 1)), []);
 
@@ -63,6 +66,10 @@ export default function StoryRail({ stories }: Props) {
   );
 
   const currentUserId = profile?.userId;
+  const railData = useMemo(
+    () => [{ userId: "__add__", isAddCard: true }, ...groups],
+    [groups]
+  );
 
   const hasUnseenStory = useMemo(
     () =>
@@ -106,9 +113,23 @@ export default function StoryRail({ stories }: Props) {
       <FlatList
         horizontal={true}
         showsHorizontalScrollIndicator={false}
-        data={groups}
-        keyExtractor={(i) => i.userId}
+        data={railData}
+        keyExtractor={(item) => (item.isAddCard ? "__add__" : item.userId)}
         renderItem={({ item, index }) => {
+          if (item.isAddCard) {
+            return (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.addCard}
+                onPress={() => navigation.navigate("SocialCreateStory")}
+              >
+                <View style={styles.addCircle}>
+                  <Ionicons name="add-circle" size={30} color="#00BFFF" />
+                </View>
+                <Text style={styles.addLabel}>Hikaye Ekle</Text>
+              </TouchableOpacity>
+            );
+          }
           const viewed = item.stories.every((s: any) =>
             isStoryViewed(s.id, item.userId, currentUserId)
           );
@@ -155,6 +176,26 @@ const styles = StyleSheet.create({
   content: {
     paddingLeft: 8,
     paddingRight: 14,
+  },
+  addCard: {
+    width: 64,
+    marginRight: 12,
+    alignItems: "center",
+  },
+  addCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "center",
   },
 });
 
