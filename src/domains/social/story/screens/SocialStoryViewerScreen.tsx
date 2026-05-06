@@ -557,42 +557,69 @@ export default function SocialStoryViewerScreen() {
         )}
         {(() => {
           const ov = (story as { overlays?: unknown })?.overlays;
-          if (
-            !ov ||
-            typeof ov !== "object" ||
-            ov === null ||
-            !("text" in ov) ||
-            Array.isArray((ov as { texts?: unknown }).texts)
-          ) {
+          if (!ov || typeof ov !== "object" || ov === null) {
             return null;
           }
-          const t = (ov as { text?: string }).text?.trim();
-          if (!t) return null;
-          const o = ov as unknown as {
-            x: number;
-            y: number;
-            scale?: number;
-            color?: string;
-          };
+
+          const multiTexts = Array.isArray((ov as { texts?: unknown }).texts)
+            ? (ov as {
+                texts: Array<{ id?: string; text?: string; x: number; y: number; scale?: number; color?: string }>;
+              }).texts
+            : null;
+
+          if (multiTexts?.length) {
+            return multiTexts.map((o, idx) => {
+              const text = o.text?.trim();
+              if (!text) return null;
+              return (
+                <Text
+                  key={o.id ?? `ov-${idx}`}
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    left: o.x,
+                    top: o.y,
+                    color: o.color ?? "#FFFFFF",
+                    fontSize: 26,
+                    fontWeight: "800",
+                    lineHeight: 32,
+                    maxWidth: "90%",
+                    transform: [{ scale: o.scale ?? 1 }],
+                    textShadowColor: "rgba(0,0,0,0.65)",
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 4,
+                  }}
+                >
+                  {text}
+                </Text>
+              );
+            });
+          }
+
+          if (!("text" in ov)) return null;
+          const legacyText = (ov as { text?: string }).text?.trim();
+          if (!legacyText) return null;
+          const legacy = ov as { x: number; y: number; scale?: number; color?: string };
+
           return (
             <Text
               pointerEvents="none"
               style={{
                 position: "absolute",
-                left: o.x,
-                top: o.y,
-                color: o.color ?? "#FFFFFF",
+                left: legacy.x,
+                top: legacy.y,
+                color: legacy.color ?? "#FFFFFF",
                 fontSize: 26,
                 fontWeight: "800",
                 lineHeight: 32,
                 maxWidth: "90%",
-                transform: [{ scale: o.scale ?? 1 }],
+                transform: [{ scale: legacy.scale ?? 1 }],
                 textShadowColor: "rgba(0,0,0,0.65)",
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 4,
               }}
             >
-              {t}
+              {legacyText}
             </Text>
           );
         })()}

@@ -50,6 +50,119 @@ type EditorRoute = RouteProp<SocialStackParamList, "SocialStoryEditor">;
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
+type TextOverlay = {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  scale: number;
+  color: string;
+};
+
+type OverlayItemProps = {
+  overlay: TextOverlay;
+  isActive: boolean;
+  onActivate: (id: string) => void;
+  onPanCommit: (id: string, tx: number, ty: number) => void;
+  onPinchCommit: (id: string, scale: number) => void;
+};
+
+function OverlayItem({ overlay, isActive, onActivate, onPanCommit, onPinchCommit }: OverlayItemProps) {
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const scaleSV = useSharedValue(overlay.scale);
+  const savedScale = useSharedValue(overlay.scale);
+  const pinchStart = useSharedValue(1);
+  const panOriginX = useSharedValue(0);
+  const panOriginY = useSharedValue(0);
+
+  useEffect(() => {
+    scaleSV.value = overlay.scale;
+    savedScale.value = overlay.scale;
+  }, [overlay.scale, savedScale, scaleSV]);
+
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .onStart(() => {
+        runOnJS(onActivate)(overlay.id);
+        panOriginX.value = translateX.value;
+        panOriginY.value = translateY.value;
+      })
+      .onUpdate((e) => {
+        translateX.value = panOriginX.value + e.translationX;
+        translateY.value = panOriginY.value + e.translationY;
+      })
+      .onEnd(() => {
+        const tx = translateX.value;
+        const ty = translateY.value;
+        translateX.value = 0;
+        translateY.value = 0;
+        runOnJS(onPanCommit)(overlay.id, tx, ty);
+      });
+
+    const pinch = Gesture.Pinch()
+      .onStart(() => {
+        runOnJS(onActivate)(overlay.id);
+        pinchStart.value = savedScale.value;
+      })
+      .onUpdate((e) => {
+        const next = pinchStart.value * e.scale;
+        scaleSV.value = next < 0.35 ? 0.35 : next > 4.5 ? 4.5 : next;
+      })
+      .onEnd(() => {
+        savedScale.value = scaleSV.value;
+        runOnJS(onPinchCommit)(overlay.id, scaleSV.value);
+      });
+
+    return Gesture.Simultaneous(pan, pinch);
+  }, [onActivate, onPanCommit, onPinchCommit, overlay.id, panOriginX, panOriginY, pinchStart, savedScale, scaleSV, translateX, translateY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scaleSV.value },
+    ],
+  }));
+
+  return (
+    <View
+      style={{
+        position: "absolute",
+        left: overlay.x,
+        top: overlay.y,
+        maxWidth: SCREEN_W * 0.92,
+        borderWidth: isActive ? 1 : 0,
+        borderColor: "#00BFFF",
+        borderRadius: 8,
+      }}
+      collapsable={false}
+    >
+      <GestureDetector gesture={gesture}>
+        <Animated.View>
+          <TouchableOpacity activeOpacity={1} onPress={() => onActivate(overlay.id)}>
+            <Animated.View style={animatedStyle}>
+              <Text
+                style={{
+                  color: overlay.color,
+                  fontSize: 24,
+                  fontWeight: "800",
+                  lineHeight: 30,
+                  textShadowColor: "rgba(0,0,0,0.6)",
+                  textShadowOffset: { width: 0, height: 2 },
+                  textShadowRadius: 6,
+                }}
+              >
+                {overlay.text.length > 0 ? overlay.text : " "}
+              </Text>
+            </Animated.View>
+          </TouchableOpacity>
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
+}
+
 export default function SocialStoryEditorScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<EditorRoute>();
@@ -64,25 +177,8 @@ export default function SocialStoryEditorScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [textColor, setTextColor] = useState("#FFFFFF");
   const [audience, setAudience] = useState<"public" | "followers" | "private">("public");
-  const [overlay, setOverlay] = useState({
-    text: "",
-    x: SCREEN_W * 0.12,
-    y: SCREEN_H * 0.38,
-    scale: 1,
-  });
-
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const scaleSV = useSharedValue(overlay.scale);
-  const savedScale = useSharedValue(overlay.scale);
-  const pinchStart = useSharedValue(1);
-  const panOriginX = useSharedValue(0);
-  const panOriginY = useSharedValue(0);
-
-  useEffect(() => {
-    scaleSV.value = overlay.scale;
-    savedScale.value = overlay.scale;
-  }, [overlay.scale]);
+  const [overlays, setOverlays] = useState<TextOverlay[]>([]);
+  const [activeOverlayId, setActiveOverlayId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!media?.uri) {
@@ -90,72 +186,67 @@ export default function SocialStoryEditorScreen() {
     }
   }, [media?.uri, navigation]);
 
+  const activeOverlay = useMemo(
+    () => overlays.find((o) => o.id === activeOverlayId) ?? null,
+    [activeOverlayId, overlays]
+  );
+
+  useEffect(() => {
+    setDraftText(activeOverlay?.text ?? "");
+    if (activeOverlay?.color) setTextColor(activeOverlay.color);
+  }, [activeOverlay?.id, activeOverlay?.text, activeOverlay?.color]);
+
   const syncDraftToOverlay = useCallback((t: string) => {
     setDraftText(t);
-    setOverlay((o) => ({ ...o, text: t }));
+    if (!activeOverlayId) return;
+    setOverlays((prev) =>
+      prev.map((o) => (o.id === activeOverlayId ? { ...o, text: t } : o))
+    );
+  }, [activeOverlayId]);
+
+  const commitPan = useCallback((id: string, tx: number, ty: number) => {
+    setOverlays((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, x: o.x + tx, y: o.y + ty } : o))
+    );
   }, []);
 
-  const commitPan = useCallback((tx: number, ty: number) => {
-    setOverlay((o) => ({ ...o, x: o.x + tx, y: o.y + ty }));
-  }, []);
-
-  const commitPinch = useCallback((s: number) => {
+  const commitPinch = useCallback((id: string, s: number) => {
     const clamped = Math.min(4.5, Math.max(0.35, s));
-    setOverlay((o) => ({ ...o, scale: clamped }));
+    setOverlays((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, scale: clamped } : o))
+    );
   }, []);
-
-  const overlayGesture = useMemo(() => {
-    const pan = Gesture.Pan()
-      .onStart(() => {
-        panOriginX.value = translateX.value;
-        panOriginY.value = translateY.value;
-      })
-      .onUpdate((e) => {
-        translateX.value = panOriginX.value + e.translationX;
-        translateY.value = panOriginY.value + e.translationY;
-      })
-      .onEnd(() => {
-        const tx = translateX.value;
-        const ty = translateY.value;
-        translateX.value = 0;
-        translateY.value = 0;
-        runOnJS(commitPan)(tx, ty);
-      });
-
-    const pinch = Gesture.Pinch()
-      .onStart(() => {
-        pinchStart.value = savedScale.value;
-      })
-      .onUpdate((e) => {
-        const next = pinchStart.value * e.scale;
-        scaleSV.value = next < 0.35 ? 0.35 : next > 4.5 ? 4.5 : next;
-      })
-      .onEnd(() => {
-        savedScale.value = scaleSV.value;
-        runOnJS(commitPinch)(scaleSV.value);
-      });
-
-    return Gesture.Simultaneous(pan, pinch);
-  }, [commitPan, commitPinch]);
-
-  const overlayAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scaleSV.value },
-    ],
-  }));
 
   const bumpScale = (delta: number) => {
-    setOverlay((o) => {
-      const ns = Math.max(0.35, Math.min(4.5, o.scale + delta));
-      scaleSV.value = ns;
-      savedScale.value = ns;
-      return { ...o, scale: ns };
-    });
+    if (!activeOverlayId) return;
+    setOverlays((prev) =>
+      prev.map((o) =>
+        o.id === activeOverlayId
+          ? { ...o, scale: Math.max(0.35, Math.min(4.5, o.scale + delta)) }
+          : o
+      )
+    );
   };
 
   const openKeyboard = () => {
+    if (!activeOverlayId) return;
+    setIsEditing(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const addOverlay = () => {
+    const id = Date.now().toString();
+    const next: TextOverlay = {
+      id,
+      text: "",
+      x: SCREEN_W * 0.15,
+      y: SCREEN_H * 0.4,
+      scale: 1,
+      color: textColor,
+    };
+    setOverlays((prev) => [...prev, next]);
+    setActiveOverlayId(id);
+    setDraftText("");
     setIsEditing(true);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
@@ -186,11 +277,15 @@ export default function SocialStoryEditorScreen() {
       audience: audience,
       createdAt: new Date().toISOString(),
       overlays: {
-        text: (draftText || overlay.text).trim(),
-        x: overlay.x,
-        y: overlay.y,
-        scale: overlay.scale,
-        color: textColor,
+        texts: overlays.map((o) => ({
+          id: o.id,
+          text: o.text,
+          x: o.x,
+          y: o.y,
+          scale: o.scale,
+          color: o.color,
+        })),
+        emojis: [],
       },
     };
     socialStoryStateService.createStory(story);
@@ -207,7 +302,6 @@ export default function SocialStoryEditorScreen() {
     return <View style={{ flex: 1, backgroundColor: "#000" }} />;
   }
 
-  const displayText = draftText || overlay.text;
   const isVideo = media.type === "video";
 
   return (
@@ -225,7 +319,7 @@ export default function SocialStoryEditorScreen() {
           <Pressable
             style={{ flex: 1 }}
             onPress={() => {
-              openKeyboard();
+              if (activeOverlayId) openKeyboard();
             }}
           >
             {isVideo ? (
@@ -263,33 +357,16 @@ export default function SocialStoryEditorScreen() {
             style={StyleSheet.absoluteFillObject}
             pointerEvents="box-none"
           >
-            <View
-              style={{
-                position: "absolute",
-                left: overlay.x,
-                top: overlay.y,
-                maxWidth: SCREEN_W * 0.92,
-              }}
-              collapsable={false}
-            >
-              <GestureDetector gesture={overlayGesture}>
-                <Animated.View style={overlayAnimatedStyle}>
-                  <Text
-                    style={{
-                      color: textColor,
-                      fontSize: 24,
-                      fontWeight: "800",
-                      lineHeight: 30,
-                      textShadowColor: "rgba(0,0,0,0.6)",
-                      textShadowOffset: { width: 0, height: 2 },
-                      textShadowRadius: 6,
-                    }}
-                  >
-                    {displayText.length > 0 ? displayText : " "}
-                  </Text>
-                </Animated.View>
-              </GestureDetector>
-            </View>
+            {overlays.map((overlay) => (
+              <OverlayItem
+                key={overlay.id}
+                overlay={overlay}
+                isActive={activeOverlayId === overlay.id}
+                onActivate={setActiveOverlayId}
+                onPanCommit={commitPan}
+                onPinchCommit={commitPinch}
+              />
+            ))}
           </View>
 
           {/* Header */}
@@ -346,6 +423,17 @@ export default function SocialStoryEditorScreen() {
                   <Text style={{ color: colors.text, fontWeight: "800" }}>A+</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  onPress={addOverlay}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                    backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <Text style={{ color: colors.text, fontWeight: "800" }}>T+</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   onPress={cycleAudience}
                   style={{
                     flexDirection: "row",
@@ -400,7 +488,13 @@ export default function SocialStoryEditorScreen() {
                 return (
                   <TouchableOpacity
                     key={c}
-                    onPress={() => setTextColor(c)}
+                    onPress={() => {
+                      setTextColor(c);
+                      if (!activeOverlayId) return;
+                      setOverlays((prev) =>
+                        prev.map((o) => (o.id === activeOverlayId ? { ...o, color: c } : o))
+                      );
+                    }}
                     style={{
                       width: 28,
                       height: 28,
