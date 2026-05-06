@@ -63,6 +63,7 @@ export default function SocialStoryEditorScreen() {
   const [draftText, setDraftText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [textColor, setTextColor] = useState("#FFFFFF");
+  const [audience, setAudience] = useState<"public" | "followers" | "private">("public");
   const [overlay, setOverlay] = useState({
     text: "",
     x: SCREEN_W * 0.12,
@@ -159,6 +160,14 @@ export default function SocialStoryEditorScreen() {
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
+  const cycleAudience = () => {
+    setAudience((prev) => {
+      if (prev === "public") return "followers";
+      if (prev === "followers") return "private";
+      return "public";
+    });
+  };
+
   const handlePublish = () => {
     if (!media?.uri) return;
     const uid = profile?.userId ?? "u1";
@@ -173,7 +182,8 @@ export default function SocialStoryEditorScreen() {
         type: media.type === "video" ? "video" : "image",
         uri: media.uri,
       },
-      visibility: "public",
+      visibility: audience,
+      audience: audience,
       createdAt: new Date().toISOString(),
       overlays: {
         text: (draftText || overlay.text).trim(),
@@ -334,6 +344,37 @@ export default function SocialStoryEditorScreen() {
                   }}
                 >
                   <Text style={{ color: colors.text, fontWeight: "800" }}>A+</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={cycleAudience}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                    backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <Ionicons
+                    name={
+                      audience === "public"
+                        ? "earth-outline"
+                        : audience === "followers"
+                          ? "people-outline"
+                          : "lock-closed-outline"
+                    }
+                    size={16}
+                    color="#00BFFF"
+                  />
+                  <Text style={{ color: "#00BFFF", fontWeight: "700", fontSize: 12 }}>
+                    {audience === "public"
+                      ? "Herkes"
+                      : audience === "followers"
+                        ? "Takipçiler"
+                        : "Yakın Arkadaşlar"}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
