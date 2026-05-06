@@ -10,32 +10,32 @@ const MOCK_USERS = [
   {
     userId: "u1",
     username: "Sen",
-    avatarUri: "https://i.pravatar.cc/150?img=1",
+    avatarUri: null,
   },
   {
     userId: "u2",
     username: "Mehmet",
-    avatarUri: "https://i.pravatar.cc/150?img=2",
+    avatarUri: null,
   },
   {
     userId: "u3",
     username: "Ayşe",
-    avatarUri: "https://i.pravatar.cc/150?img=3",
+    avatarUri: null,
   },
   {
     userId: "u4",
     username: "Ali",
-    avatarUri: "https://i.pravatar.cc/150?img=4",
+    avatarUri: null,
   },
   {
     userId: "u5",
     username: "Zeynep",
-    avatarUri: "https://i.pravatar.cc/150?img=5",
+    avatarUri: null,
   },
   {
     userId: "u6",
     username: "Kerem",
-    avatarUri: "https://i.pravatar.cc/150?img=6",
+    avatarUri: null,
   },
 ];
 
